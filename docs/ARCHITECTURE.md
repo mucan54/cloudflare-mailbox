@@ -113,6 +113,7 @@ Auth: `Authorization: Bearer <API_TOKEN>`
 | Amaç | Method & Path | Kapsam |
 |------|---------------|--------|
 | Token doğrula (onboarding) | `GET /user/tokens/verify` | kullanıcı |
+| İzin gruplarını listele (template key pinleme) | `GET /user/tokens/permission_groups` | kullanıcı |
 | Hesapları listele (otomatik tespit) | `GET /accounts` | kullanıcı |
 | Domainleri listele | `GET /zones` | hesap |
 | Zone detay | `GET /zones/{zone_id}` | zone |
@@ -393,6 +394,16 @@ return [
     'sending' => [
         'driver' => env('CLOUDFLARE_SEND_DRIVER', 'api'),  // 'api' | 'smtp'
     ],
+    // Onboarding token-template deep-link için sabitlenen izin-grubu key'leri
+    // (GET /user/tokens/permission_groups ile bir kez doğrulanıp buraya yazılır).
+    'token_template' => [
+        'permission_groups' => [
+            ['key' => 'email_routing', 'type' => 'edit'],   // gerçek key impl. sırasında pinlenir
+            ['key' => 'email_sending', 'type' => 'edit'],
+            ['key' => 'zone',          'type' => 'read'],
+        ],
+        'name' => 'Cloudflare Mailbox',
+    ],
     'webhook' => [
         'secret'          => env('CLOUDFLARE_WEBHOOK_SECRET'),
         'tolerance_secs'  => 300,
@@ -498,16 +509,29 @@ template deep-link + otomatik hesap tespiti ile en aza indirilir.
 
 **Akış (Filament tenant registration sayfası):**
 
-1. **"Cloudflare'de token oluştur" butonu** → CF token sayfasını **gereken izinler
-   önceden seçili** açan template URL:
+1. **"Cloudflare'de token oluştur" butonu (tek tık)** → CF token sayfasını
+   **gereken izinler önceden seçili** açan template URL:
    ```
    https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=<encoded>&accountId=*&zoneId=all&name=Cloudflare+Mailbox
    ```
-   `permissionGroupKeys` = URL-encoded JSON: **Email Routing (Edit)**, **Email
-   Sending (Edit)**, **Zone (Read)**. Kullanıcı yalnız "Create Token" der ve token'ı
-   kopyalar.
+   - `permissionGroupKeys` = URL-encoded JSON:
+     `[{"key":"<email_routing>","type":"edit"},{"key":"<email_sending>","type":"edit"},{"key":"<zone>","type":"read"}]`
+     (Email Routing Edit + Email Sending Edit + Zone Read).
+   - **Key'ler tahmin edilmez, sabitlenir:** email permission-group `key`'leri
+     Cloudflare public dokümanında listeli değil; implementasyonda bir kez
+     `GET /user/tokens/permission_groups` ile gerçek key'ler çekilip **config'e
+     pinlenir** (`config/cloudflare.php` → `token_template.permission_groups`).
+     Böylece link %100 doğru dolar; Cloudflare key'i değiştirirse tek yerde
+     güncellenir.
+   - **Kullanıcı deneyimi:** link → (gerekiyorsa CF login) → izinler dolu →
+     **"Continue to summary" → "Create Token" → "Copy"**. İzin ayarı yok; Cloudflare
+     tarafında ~3 tık. (Token yalnız bir kez gösterildiği için "Create+Copy" adımı
+     güvenlik gereği kullanıcıda kalır — bu adım kaldırılamaz.)
 2. Kullanıcı token'ı forma **yapıştırır**.
-3. Uygulama **doğrular:** `GET /user/tokens/verify` (token geçerli/aktif mi).
+3. Uygulama **doğrular:** `GET /user/tokens/verify` (token geçerli/aktif mi) +
+   gereken izinlerin varlığını küçük bir test çağrısıyla (`GET /zones`,
+   `.../email/routing`) teyit eder. **Eksik izin varsa** hangi iznin ekleneceğini
+   net gösterir (pre-fill bir şeyi kaçırsa bile onboarding sağlam biter).
 4. Uygulama **hesabı otomatik bulur:** `GET /accounts` → tek hesap varsa direkt,
    birden fazlaysa kullanıcıya **seçtirir** (account_id elle girilmez).
 5. `cloudflare_accounts` tenant kaydı oluşur: `account_id`, `api_token`
