@@ -21,6 +21,7 @@
 12. [Yol haritası (fazlar)](#12-yol-haritası)
 13. [Kararlar](#13-kararlar-netleşti)
 14. [Dağıtım (Coolify)](#14-dağıtım-coolify)
+15. [Gözden geçirme & iyileştirmeler](#15-gözden-geçirme--iyileştirmeler)
 
 ---
 
@@ -43,8 +44,17 @@ altında birleştirdi. İki yönü vardır:
   (ör. `support@domain.com → sen@gmail.com`). Şifreli gerçek posta kutusu yoktur;
   her adres bir yönlendirme kuralıdır. Bizim uygulamamız, "gerçek posta kutusu"
   deneyimini **kendi DB'sinde** kurar.
-- **Domain Cloudflare DNS'te olmak zorundadır.** Onboard sırasında Cloudflare,
-  `cf-bounce` alt alanına MX + SPF + DKIM + DMARC kayıtlarını otomatik ekler.
+- **Domain Cloudflare DNS'te olmak zorundadır.**
+- **Gönderme (Sending) ve Alma (Routing) onboarding'i AYRIDIR** — bir domain için iki
+  bağımsız durum:
+  - *Sending onboarding:* `cf-bounce` alt alanına MX + SPF + DKIM + DMARC eklenir →
+    o domainden **mail gönderilebilir**.
+  - *Routing onboarding:* domaine MX eklenir → o domaine **mail alınabilir**
+    (forward/worker).
+  - Tam mail servisi için **ikisi de** gerekir. Bir domain yalnız gönderme, yalnız
+    alma veya ikisi birden aktif olabilir. UI her iki durumu ayrı gösterir; `domains`
+    tablosu `sending_enabled` + `routing_enabled` ayrı tutar. Compose formu `from`
+    olarak **yalnız sending_enabled** domain adreslerini sunar.
 - **Giden mesaj boyutu (ekler dahil) 5 MiB'ı geçemez.**
 - Hedef adresler **hesap seviyesinde** paylaşılır; routing kuralları **zone (domain)
   seviyesindedir**. Doğrulanmamış hedefe giden kural otomatik pasifleşir.
@@ -96,10 +106,10 @@ Yöneticiler `/admin` tenancy'li panele girer. Ayrıntı: [§8.1](#81-paneller--
 - **Giden:** Filament Compose formu → `SendEmail` job → `CloudflareClient::send()`
   (REST) **veya** `Mail::mailer('cloudflare')` (SMTP) → `sent_emails` log +
   delivered/queued/bounced durumu.
-- **Gelen:** mail → Cloudflare MX → routing rule ("Send to a Worker") → Email Worker
-  ham MIME'yi `postal-mime` ile parse eder, ekleri R2/Storage'a koyar, Laravel'e
-  HMAC imzalı JSON POST atar → `StoreIncomingEmail` job → `emails` tablosu → Filament
-  Inbox.
+- **Gelen:** mail → Cloudflare MX → routing rule (**catch-all → Worker**, §5.0) →
+  Email Worker ham MIME'yi `postal-mime` ile parse eder, küçük ekleri base64 gövdede /
+  büyükleri R2'ye koyar, Laravel'e HMAC imzalı JSON POST atar → `StoreIncomingEmail`
+  job (idempotent) → `emails` tablosu → Filament Inbox.
 - **Yönetim:** Filament Resource'ları `CloudflareClient` üzerinden Cloudflare'deki
   zone/rule/address kaynaklarını okur/yazar; yerel DB senkron kopya (cache) tutar.
 
@@ -191,6 +201,24 @@ Uygulama içinde tek bir `MailSender` arayüzü; iki implementasyon
 
 Cloudflare inbox tutmadığından, tam posta kutusu deneyimi şu zincirle kurulur:
 
+### 5.0 Gelen yakalama stratejisi (catch-all → Worker)
+
+**Tam mail servisi için önerilen varsayılan: domainin catch-all kuralını Worker'a
+bağlamak.** Böylece o domaine gelen **her adres** (bilinen mailbox'lar + rastgele
+adresler) tek Worker'dan yakalanır; Laravel `to_email` ile mailbox'a çözer.
+
+- **`inbound_capture` modları** (`domains.inbound_capture`):
+  - `catch_all` *(önerilen)* — domaine gelen her şey Worker'a; en az yönetim, tam
+    kapsama. Bilinmeyen adres → `emails.mailbox_id = null` (admin inbox'ta görünür).
+  - `per_address` — yalnız seçili adresler Worker'a (daha dar; her mailbox için ayrı
+    "Send to Worker" kuralı). Belirli adresleri klasik forward'da bırakmak isteyen
+    için.
+  - `none` — bu domainde gelen yakalama kapalı.
+- **Klasik forward'la birlikte:** İstenirse Worker aynı anda `message.forward()` ile
+  eski yönlendirmeyi de sürdürür (hem inbox'a düşer hem eski adrese iletir).
+- Deploy sırasında (`cf:deploy-worker`) seçilen moda göre catch-all veya per-address
+  kuralları API ile kurulur.
+
 ### 5.1 Email Worker (`cf/` klasörü)
 
 Worker kaynağı ve deploy araçları repoda **`cf/`** klasöründe tutulur (küçük bir
@@ -230,17 +258,24 @@ export default {
     };
 
     const body = JSON.stringify(payload);
-    const sig = await hmacSha256(env.WEBHOOK_SECRET, body);   // HMAC imza
-    await fetch(env.WEBHOOK_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CF-Account": env.ACCOUNT_ID,          // imzasız; Laravel hesabı bununla bulur
-        "X-CF-Signature": sig,
-        "X-CF-Timestamp": `${Date.now()}`,
-      },
-      body,
-    });
+    const ts = `${Date.now()}`;
+    const sig = await hmacSha256(env.WEBHOOK_SECRET, `${ts}.${body}`); // timestamp+body imzalı
+    try {
+      const res = await fetch(env.WEBHOOK_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CF-Account": env.ACCOUNT_ID,        // imzasız; Laravel hesabı bununla bulur
+          "X-CF-Signature": sig,
+          "X-CF-Timestamp": ts,
+        },
+        body,
+      });
+      if (!res.ok) throw new Error(`webhook ${res.status}`);
+    } catch (e) {
+      // Laravel düştüyse mail KAYBOLMASIN: throw etme, yedek adrese ilet
+      if (env.FALLBACK_FORWARD_TO) await message.forward(env.FALLBACK_FORWARD_TO);
+    }
     // opsiyonel: klasik forward da sürsün → await message.forward(env.FORWARD_TO);
   },
 };
@@ -250,10 +285,21 @@ export default {
 `rawSize`, `canBeForwarded`, `setReject(reason)`, `forward(rcptTo, headers?)`,
 `reply(EmailMessage)`. Reply/compose için `mimetext` + `nodejs_compat` flag'i.
 
-**Ekler:** varsayılan olarak base64 ile webhook gövdesinde gönderilir; Laravel bunu
-`attachments_disk` (S3/R2/local) diskine yazar. Çok büyük ekler için opsiyonel:
-Worker'a bir **R2 bucket binding**'i eklenip ek doğrudan R2'ye PUT edilir, webhook'a
-yalnız key gönderilir (`wrangler.toml.stub`'da yorumlu örnek).
+**Ekler (boyut eşiği):** Küçük ekler (toplam < ~2–3 MiB, config'le ayarlanır) base64
+ile webhook gövdesinde gönderilir; Laravel `attachments_disk`'e yazar. **Büyük ekler
+webhook'u şişirmesin** diye eşik üstünde Worker eki doğrudan **R2 bucket binding** ile
+R2'ye PUT eder, webhook'a yalnız key gönderir. (Email Routing mesajları ~25 MiB'a
+kadar olabilir; base64 %33 şişirir + PHP `post_max_size`/`upload_max_filesize`
+sınırları vardır — bu yüzden eşik şart.) R2 binding `wrangler.toml.stub`'da
+opsiyonel/yorumlu; kapalıysa eşik üstü mail için Worker yalnız key'siz metadata +
+"ek çok büyük" işareti gönderir (mail kaybolmaz).
+
+**Güvenilirlik — mail asla kaybolmasın:** Worker webhook'a POST **başarısız olursa
+`email()` handler'ı THROW ETMEZ** (throw → mail reddedilir/bounce olur). Bunun yerine:
+(a) hata yakalanır ve `ctx.waitUntil` ile kısa retry denenir; (b) yine olmazsa
+**fallback forward** (`env.FALLBACK_FORWARD_TO`) ile mail bir yedek adrese iletilir —
+böylece Laravel geçici düşse bile mail kaybolmaz. Alternatif dayanıklılık: Cloudflare
+**Queue/D1**'e yazıp sonra Laravel'e teslim (ileri opsiyon; `cf/README`'de belgelenir).
 
 ### 5.1.1 Laravel-güdümlü konfigürasyon & deploy
 
@@ -313,11 +359,15 @@ kullanılır (container/Coolify ortamında tek sağlam yol):
 
 - Route: `POST /api/cf/incoming` (Filament auth dışı, kendi HMAC doğrulaması).
 - Middleware: `X-CF-Account` ile tenant/hesap bulunur → o hesabın `webhook_secret`'ı
-  ile `X-CF-Signature` HMAC doğrulanır + `X-CF-Timestamp` replay penceresi (±5 dk).
+  ile imza doğrulanır. **İmza `HMAC(secret, timestamp + "." + body)` üzerinden** —
+  timestamp de imzaya dahildir (yakalanan isteğin farklı timestamp'le tekrar
+  oynatılması engellenir) + `X-CF-Timestamp` ±5 dk penceresi + rate limit.
   (Hesap-başı secret → hesap izolasyonu.)
 - Controller ince tutulur → `StoreIncomingEmail` job'a devreder (kuyruk) → `emails`
   + `attachments` tablolarına yazar, `to_email → mailbox_id` çözer, thread'e bağlar
-  (In-Reply-To/References). Base64 ekler `attachments_disk`'e yazılır.
+  (In-Reply-To/References). **`ingest_key` unique → çift teslimatta ikinci kayıt
+  sessizce atlanır** (idempotent). Ekler eşik altıysa base64'ten `attachments_disk`'e,
+  üstüyse R2 key'inden bağlanır.
 
 ### 5.3 Yanıtlama (reply) iki yol
 
@@ -351,7 +401,11 @@ sürücüde de çalışacak şekilde portatif yazılır (bkz. [§11](#11-test--c
 - **cloudflare_account_user** *(pivot, üyelik)* — `cloudflare_account_id, user_id,
   role (owner|member), timestamps`
 - **domains** — `id, cloudflare_account_id, zone_id, name, status,
-  routing_enabled, dns_verified (spf/dkim/dmarc json), last_synced_at, timestamps`
+  routing_enabled, sending_enabled, inbound_capture (none|catch_all|per_address),
+  dns_records (json: beklenen/mevcut MX/SPF/DKIM/DMARC + verified durumları),
+  last_synced_at, timestamps`
+  - `sending_enabled`/`routing_enabled` ayrı; `inbound_capture` domainin gelen
+    yakalama modu (bkz. §5.0).
 - **destination_addresses** — `id, cloudflare_account_id, cf_id, email, verified_at,
   timestamps`
 - **routing_rules** — `id, domain_id, cf_id, name, matcher (local part),
@@ -366,11 +420,13 @@ sürücüde de çalışacak şekilde portatif yazılır (bkz. [§11](#11-test--c
   - Not: gerçekten mail alması için ilgili adreste "Send to Worker" routing kuralı
     olmalı (mailbox oluştururken garanti edilir).
 - **emails** (inbox) — `id, cloudflare_account_id, domain_id, mailbox_id (nullable),
-  message_id, in_reply_to, references (json), from_name, from_email, to_email,
-  cc (json), subject, text_body, html_body, headers (json), raw_size, read_at,
-  starred, folder, received_at, timestamps` (+ portatif arama; bkz. §11)
-  - `mailbox_id`, webhook ingest'te `to_email` → mailbox eşlemesiyle doldurulur;
-    mailbox portalı yalnız kendi `mailbox_id`'sini görür.
+  message_id, ingest_key, in_reply_to, references (json), from_name, from_email,
+  to_email, cc (json), subject, text_body, html_body, headers (json), raw_size,
+  read_at, starred, folder, received_at, timestamps` (+ portatif arama; bkz. §11)
+  - `mailbox_id`, webhook ingest'te `to_email` → mailbox eşlemesiyle doldurulur
+    (eşleşmezse **null = atanmamış**, sadece admin inbox'ta görünür).
+  - `ingest_key` = `sha256(account + message_id + to_email)`, **unique** →
+    webhook/Worker retry'de **çift kayıt engellenir** (idempotent ingest).
 - **sent_emails** — `id, cloudflare_account_id, domain_id, mailbox_id (nullable),
   driver (api|smtp), from_email, to (json), cc (json), bcc (json), subject,
   html_body, text_body, status (queued/delivered/bounced/failed),
@@ -605,9 +661,22 @@ job'ları sırayla; ilerleme Filament notification/progress ile gösterilir; tek
   konu, HTML editör (RichEditor), ek yükleme (≤5 MiB toplam uyarısı), gönder →
   job.
 - **SettingsPage** (custom Page) — Cloudflare hesabı/token yönetimi, gönderim
-  sürücüsü seçimi, webhook secret gösterimi, bağlantı testi (`GET /zones`).
-- **Widget'lar** — son 24s teslim/queue/bounce; okunmamış sayısı; domain sağlık
-  durumu; son gelen mailler.
+  sürücüsü seçimi, webhook secret gösterimi, bağlantı testi (`GET /zones`),
+  **"Test maili gönder"** butonu (gönderim yolunun uçtan uca sağlığını doğrular).
+- **SetupWizard / Onboarding sayfası** (ease-of-use) — durum makinesini (§8.2.2)
+  **tek rehberli akışta** toplar: Bağlan → Full Sync → Gelen yakalama modu seç →
+  Deploy Worker → İlk mailbox'ı oluştur. Her adım ✓/✗ ve "sıradaki" CTA gösterir.
+- **Widget'lar:**
+  - **Kurulum kontrol listesi** — token bağlı? domain sync'li? worker deploy'lu (drift?)?
+    en az bir sending-enabled domain? en az bir mailbox? → eksikler tıklanabilir CTA.
+  - **Sistem sağlığı** — queue çalışıyor mu, `wrangler` mevcut mu, webhook son 24s
+    erişildi mi, worker drift durumu.
+  - **Metrikler** — son 24s teslim/queue/bounce; okunmamış sayısı; domain sağlık;
+    son gelen mailler.
+- **Hızlı aksiyonlar (ease-of-use):** RoutingRule/adres satırından **"Bu adres için
+  mailbox oluştur"**; DomainResource'ta **"Gönderme'yi etkinleştir" / "Alma'yı
+  etkinleştir"** (ayrı onboarding) + **"DNS'i yeniden denetle"**; Inbox'ta hızlı
+  **"Yanıtla"**.
 
 Yetkilendirme: Filament auth + **tenant üyeliği** (pivot `role`: owner/member).
 Tenant içi ince rol/izin gerekirse `bezhanSalleh/filament-shield` eklenir.
@@ -666,10 +735,11 @@ Tenant içi ince rol/izin gerekirse `bezhanSalleh/filament-shield` eklenir.
   maskeli gösterim.
 - **En dar API token scope'u** (Zone:Read, Email Routing:Edit, Email Sending:Edit).
 - **Webhook:** **hesap-başı** HMAC-SHA256 imza (`webhook_secret` her tenant'ta
-  şifreli) + timestamp toleransı (replay koruması) + rate limit; `X-CF-Account`
-  ile hesap bulunup o secret'la doğrulanır; imzasız/eşleşmeyen istek reddedilir.
-  Secret'lar loglara yazılmaz; deploy sırasında `wrangler secret put` ile stdin'den
-  aktarılır (komut satırında görünmez).
+  şifreli), imza **`timestamp + "." + body`** üzerinden (replay/gövde-oynatma
+  koruması) + timestamp toleransı + rate limit; `X-CF-Account` ile hesap bulunup o
+  secret'la doğrulanır; imzasız/eşleşmeyen istek reddedilir. `ingest_key` unique ile
+  idempotent (çift teslimat zararsız). Secret'lar loglara yazılmaz; deploy sırasında
+  `wrangler secret put` ile stdin'den aktarılır (komut satırında görünmez).
 - **HTML mail render:** inbox'ta gelen HTML **sanitize** edilir (XSS/remote content),
   `Content-Security-Policy` ile izole iframe render.
 - **Ek dosyalar:** doğrudan public değil; imzalı geçici URL ile indirilir.
@@ -744,16 +814,23 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
 - `MailSender` arayüzü + `ApiMailSender` (send API) + `SmtpMailSender`.
 - Migration+Model: `sent_emails`, `attachments`.
 - `SendEmail` job; durum eşleme (delivered/queued/bounced).
-- Filament **ComposePage** (RichEditor, ek yükleme, ≤5 MiB) + **SentEmailResource**
-  (durum rozetleri, yeniden gönder).
+- Filament **ComposePage** (RichEditor, ek yükleme, ≤5 MiB) — `from` yalnız
+  **sending_enabled** domain adresleri + **SentEmailResource** (durum rozetleri,
+  yeniden gönder). Ayarlarda "Test maili gönder".
+- 429/rate-limit'te Saloon retry + backoff; hata kodları (10001–10203) kullanıcıya
+  anlaşılır mesaja çevrilir.
 - **Çıktı:** arayüzden mail gönderiliyor, log + durum görünüyor; sürücü config'den
   değişiyor.
 
-### Faz 3 — Adres/kural yazma (yönetim)
+### Faz 3 — Adres/kural yazma + domain onboarding (yönetim)
 - RoutingRule create/edit/delete/toggle → Cloudflare `PUT/POST/DELETE`.
 - DestinationAddress ekle/sil + doğrulama maili tetikleme.
-- Catch-all yönetimi; domain routing aç/kapa; "Onboard" akışı + DNS durum rozetleri.
-- **Çıktı:** mail adresleri/yönlendirmeler panelden tam yönetiliyor.
+- **Ayrı onboarding:** "Gönderme'yi etkinleştir" (cf-bounce/DKIM) ve "Alma'yı
+  etkinleştir" (MX) — `sending_enabled`/`routing_enabled` ayrı; DNS kayıt durum
+  rozetleri + "DNS'i yeniden denetle".
+- Catch-all yönetimi; domain routing aç/kapa.
+- **Çıktı:** mail adresleri/yönlendirmeler ve gönderme/alma durumları panelden tam
+  yönetiliyor.
 
 ### Faz 4 — Gelen kutusu (tam mail servisi)
 - **`cf/` Worker projesi:** `src/inbound-email.js` (postal-mime parse + HMAC +
@@ -765,10 +842,15 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
 - **Drift/redeploy:** `cf:worker:sync` (kaymışları redeploy) + `cf:worker:status`;
   `CloudflareAccount` observer → `DeployWorkerJob`; tenant satırında güncel/kaymış
   rozeti (bkz. §5.1.2).
-- Laravel webhook route + `X-CF-Account`→hesap→per-account HMAC middleware +
-  `StoreIncomingEmail` job (doğru tenant + `mailbox_id` çözümü).
-- Migration+Model: `emails` (portatif arama), thread bağlama; base64 ekler
-  `attachments_disk`'e.
+- **Gelen yakalama modu** (§5.0): varsayılan **catch-all → Worker**; deploy sırasında
+  ilgili kurallar API ile kurulur.
+- Laravel webhook route + `X-CF-Account`→hesap→per-account HMAC (timestamp+body imza)
+  middleware + `StoreIncomingEmail` job (doğru tenant + `mailbox_id` çözümü +
+  `ingest_key` ile idempotent).
+- **Güvenilirlik:** Worker webhook başarısızsa throw etmez → fallback forward; ek
+  boyutu eşiği (küçük=base64, büyük=R2).
+- Migration+Model: `emails` (portatif arama, `ingest_key` unique), thread bağlama;
+  ekler `attachments_disk`/R2'ye.
 - Filament **InboxResource**: liste/filtre/arama, güvenli HTML görüntüleme, ek indirme,
   okundu/yıldız, **Yanıtla/İlet** (Faz 2 giden akışına bağlanır).
 - **Çıktı:** gelen mailler arayüzde görüntüleniyor, yanıtlanıyor — tam mail servisi.
@@ -785,6 +867,8 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
   kullanıyor; admin `/admin` tenancy'li panelde. İki yüzey tamamen izole.
 
 ### Faz 6 — Cila & üretim
+- **SetupWizard/Onboarding sayfası** + **Kurulum kontrol listesi** & **Sistem sağlığı**
+  widget'ları (§8.3); hızlı aksiyonlar.
 - Dashboard widget'ları (teslim/bounce/okunmamış/domain sağlık).
 - HTML sanitizasyon + CSP iframe render sağlamlaştırma.
 - Redis + Horizon; queue izleme.
@@ -878,3 +962,49 @@ php artisan migrate --force && php artisan cf:worker:sync
 > **GitHub Actions** ile yapmak isteyenler için `cf/` bağımsız çalışır; ama
 > env-güdümlü otomatik redeploy senaryosunda Coolify post-deploy hook yolu daha
 > düz. İki yol da desteklenir; README ikisini de belgeler.
+
+### 14.5 Yerel geliştirme (inbound)
+Worker Cloudflare bulutunda çalışır; `APP_URL=localhost` ise webhook'a **ulaşamaz**.
+Dev'de gelen mail için üç yol:
+- **`wrangler dev` yerel email testi:** ham maili yerel endpoint'e POST ederek
+  `email()` handler'ı çalıştırılır (deploy'suz).
+- **Tünel:** `cloudflared tunnel` / ngrok ile local'i public HTTPS'e açıp `APP_URL`'i
+  ona set etmek (gerçek uçtan uca test).
+- **Webhook fixture:** `POST /api/cf/incoming`'e örnek imzalı payload'larla test
+  (Pest); Worker'sız ingest/parse/depolama doğrulanır.
+
+---
+
+## 15. Gözden geçirme & iyileştirmeler
+
+Bu revizyonda tüm isterler ve kullanım kolaylığı gözden geçirildi; bulgular ve
+uygulanan iyileştirmeler:
+
+**Doğruluk / kapsama (uygulandı):**
+- **Gönderme ≠ Alma onboarding.** Cloudflare'de ayrı işlemler; `domains` artık
+  `sending_enabled` + `routing_enabled` ayrı tutuyor, compose `from` yalnız
+  sending-enabled adresleri sunuyor (§1, §6, Faz 3).
+- **Catch-all → Worker** varsayılan gelen yakalama; tam inbox için en az yönetimli
+  yol. `inbound_capture` modu (`catch_all|per_address|none`) (§5.0).
+- **Mail kaybını önleme:** Worker webhook başarısızsa throw etmez → `ctx.waitUntil`
+  retry + fallback forward (§5.1).
+- **Idempotent ingest:** `emails.ingest_key` unique → Worker/webhook retry çift kayıt
+  yapmaz (§5.2, §6).
+- **Ek boyutu eşiği:** küçük=base64 gövde, büyük=R2 binding; PHP `post_max_size`
+  gerçeği göz önünde (§5.1).
+- **Webhook imzası sağlamlaştırıldı:** `HMAC(secret, timestamp + "." + body)` (§5.2, §10).
+- **Atanmamış mail:** `mailbox_id=null` → yalnız admin inbox'ta görünür (§6).
+
+**Kullanım kolaylığı (uygulandı):**
+- **SetupWizard / Onboarding sayfası** + **Kurulum kontrol listesi** ve **Sistem
+  sağlığı** widget'ları (queue/wrangler/webhook/drift) (§8.3).
+- **Hızlı aksiyonlar:** "Bu adres için mailbox oluştur", "Gönderme/Alma'yı etkinleştir",
+  "DNS'i yeniden denetle", "Test maili gönder" (§8.3, Faz 2/3).
+- **Yerel geliştirme inbound** rehberi (wrangler dev / tünel / fixture) (§14.5).
+
+**İleride (opsiyonel, kapsam dışı — not edildi):**
+- Denetim izi: `spatie/laravel-activitylog` (admin aksiyonları).
+- Çok dilli UI (TR/EN) — şu an locale `en`.
+- Veri saklama/arşiv politikası: büyük gövdelerin diske taşınması, eski mail temizliği.
+- Async bounce/complaint bildirimleri (Cloudflare API sınırlı; izlenecek).
+- Spam filtresi (Worker tarafında) — daha önce kapsam dışı bırakıldı.
