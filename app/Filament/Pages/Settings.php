@@ -78,7 +78,8 @@ class Settings extends Page
                         .'class="fi-link" style="text-decoration:underline">Cloudflare’de yeni token oluştur</a> '
                         .'— gereken izinler: Account · <b>Email Routing Addresses</b> · Edit | Zone · '
                         .'<b>Email Routing Rules</b> · Edit | Account · <b>Email Sending</b> · Edit | '
-                        .'Account · <b>Workers Scripts</b> · Edit | Zone · <b>Zone</b> · Read.'
+                        .'Account · <b>Workers Scripts</b> · Edit | User · <b>User Details</b> · Read | '
+                        .'Zone · <b>Zone</b> · Read.'
                     )),
 
                 Select::make('sending_driver')
