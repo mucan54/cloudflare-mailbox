@@ -87,6 +87,25 @@ included [`docker-compose.yaml`](docker-compose.yaml). It builds the
 4. Deploy the inbound Worker from the admin panel's **Deploy Worker** action (or the
    Coolify Terminal: `php artisan cf:worker:sync`).
 
+`APP_KEY` and `VAPID_SUBJECT` are generated automatically. Attachments need the
+`AWS_*` (R2/S3) vars; mail send/receive works without them.
+
+### Enabling Web Push notifications (optional)
+
+Push is off until you set a VAPID keypair. It can't be auto-generated (it's a stable
+EC keypair — rotating it breaks every existing subscription), so generate it **once**
+and set two env vars:
+
+1. In the Coolify **Terminal** (or locally), run:
+   ```bash
+   php artisan webpush:generate
+   ```
+   It prints a `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`.
+2. Add both to Coolify → **Environment Variables** and redeploy.
+
+Keep them stable across deploys. On iOS, push only works once the user installs the
+PWA to the Home Screen (Add to Home Screen).
+
 ### Notes
 
 - **APP_URL must be your real public domain** — it is both the inbound webhook base
@@ -103,7 +122,7 @@ included [`docker-compose.yaml`](docker-compose.yaml). It builds the
 ## Testing
 
 ```bash
-php artisan test        # 52 feature tests
+php artisan test        # 54 feature tests
 vendor/bin/pint         # code style
 ```
 
