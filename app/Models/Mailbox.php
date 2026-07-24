@@ -7,14 +7,17 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
+use NotificationChannels\WebPush\HasPushSubscriptions;
 
 /**
  * A single mail address a person can log into (mailbox portal).
- * Globally unique by email; tenant-independent login.
+ * Globally unique by email; tenant-independent login. Authenticates the
+ * headless mailbox API via Sanctum tokens (web SPA + mobile).
  */
 class Mailbox extends Authenticatable implements AuthenticatableContract
 {
-    use Notifiable;
+    use HasApiTokens, HasPushSubscriptions, Notifiable;
 
     protected $fillable = [
         'cloudflare_account_id', 'domain_id', 'email', 'display_name',

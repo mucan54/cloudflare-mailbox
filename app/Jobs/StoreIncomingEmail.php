@@ -7,6 +7,7 @@ use App\Models\CloudflareAccount;
 use App\Models\Domain;
 use App\Models\Email;
 use App\Models\Mailbox;
+use App\Notifications\IncomingMailNotification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -73,6 +74,11 @@ class StoreIncomingEmail implements ShouldQueue
         ]);
 
         $this->storeAttachments($email, $p['attachments'] ?? []);
+
+        // Web Push "you have new mail" — only when the mailbox has subscriptions.
+        if ($mailbox && $mailbox->pushSubscriptions()->exists()) {
+            $mailbox->notify(new IncomingMailNotification($email));
+        }
     }
 
     protected function resolveDomain(CloudflareAccount $account, ?string $toEmail): ?Domain
