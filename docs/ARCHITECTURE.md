@@ -112,6 +112,8 @@ Auth: `Authorization: Bearer <API_TOKEN>`
 
 | Amaç | Method & Path | Kapsam |
 |------|---------------|--------|
+| Token doğrula (onboarding) | `GET /user/tokens/verify` | kullanıcı |
+| Hesapları listele (otomatik tespit) | `GET /accounts` | kullanıcı |
 | Domainleri listele | `GET /zones` | hesap |
 | Zone detay | `GET /zones/{zone_id}` | zone |
 | Routing ayarları (aç/kapat/durum) | `GET·POST·PATCH·DELETE /zones/{zone_id}/email/routing` | zone |
@@ -482,12 +484,42 @@ Uygulamanın **iki ayrı Filament paneli** ve **iki ayrı auth guard**'ı vardı
   `cloudflare_account_id` ile scope uygular (ilişki üzerinden). Doğrudan bu kolonu
   taşımayan tablolarda `getTenantOwnershipRelationshipName()` ile ilişki belirtilir.
 - **Tenant kaydı/onboarding:** Yeni Cloudflare hesabı ekleme, Filament
-  **tenant registration** sayfası ile yapılır (hesap ID + token gir → `GET /zones`
-  ile doğrula). Token tenant kaydında `encrypted` saklanır.
+  **tenant registration** sayfası ile yapılır; ayrıntılı akış §8.2.1.
 - **Global kaynaklar:** Cloudflare'de hedef adresler hesap seviyesinde olduğundan,
   `DestinationAddressResource` de tenant'a scope'ludur (hesap = tenant).
 - **URL yapısı:** `/{tenant-slug}/domains`, `/{tenant-slug}/inbox` … Böylece
   Cloudflare'in account-scoped modeliyle birebir aynı zihinsel model korunur.
+
+### 8.2.1 Cloudflare hesabı bağlama (onboarding)
+
+**"Login with Cloudflare" (OAuth) DEĞİL, manuel scoped API token** kullanılır — en
+kolay, en sağlam ve self-host (Coolify) dağıtımına en uygun yol. Sürtünme, token
+template deep-link + otomatik hesap tespiti ile en aza indirilir.
+
+**Akış (Filament tenant registration sayfası):**
+
+1. **"Cloudflare'de token oluştur" butonu** → CF token sayfasını **gereken izinler
+   önceden seçili** açan template URL:
+   ```
+   https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=<encoded>&accountId=*&zoneId=all&name=Cloudflare+Mailbox
+   ```
+   `permissionGroupKeys` = URL-encoded JSON: **Email Routing (Edit)**, **Email
+   Sending (Edit)**, **Zone (Read)**. Kullanıcı yalnız "Create Token" der ve token'ı
+   kopyalar.
+2. Kullanıcı token'ı forma **yapıştırır**.
+3. Uygulama **doğrular:** `GET /user/tokens/verify` (token geçerli/aktif mi).
+4. Uygulama **hesabı otomatik bulur:** `GET /accounts` → tek hesap varsa direkt,
+   birden fazlaysa kullanıcıya **seçtirir** (account_id elle girilmez).
+5. `cloudflare_accounts` tenant kaydı oluşur: `account_id`, `api_token`
+   (**encrypted**), otomatik üretilen `webhook_secret` (encrypted); giriş yapan
+   kullanıcı pivot ile **owner** olur.
+6. `GET /zones` ile bağlantı teyidi + ilk domain senkronu tetiklenir.
+
+**Neden OAuth değil:** Cloudflare self-managed OAuth (2026) mevcut, ama uygulama
+sahibinin OAuth client kaydı + public için domain doğrulaması gerektirir; projeyi
+başkaları Coolify'da deploy edince her kurulum kendi client'ını kaydetmek zorunda
+kalır. Ayrıca email routing/sending scope'larının OAuth ile verilebilirliği doküman
+tarafında net değil. Bu yüzden OAuth **opsiyonel/ileri faz** (§13).
 
 ### 8.3 Admin panel kaynakları & sayfaları
 
@@ -625,7 +657,10 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
 - Migration + Model: `cloudflare_accounts` (tenant, encrypted token) +
   `cloudflare_account_user` pivot.
 - **Filament tenancy'yi etkinleştir:** `AdminPanelProvider`'da tenant + tenant menü;
-  `User` modeline `HasTenants`; tenant registration (hesap ID + token → doğrula).
+  `User` modeline `HasTenants`.
+- **Onboarding (§8.2.1):** token template deep-link butonu → token yapıştır →
+  `GET /user/tokens/verify` + `GET /accounts` ile hesabı otomatik bul → tenant kaydı
+  (encrypted token + webhook_secret; kullanıcı owner). **OAuth yok.**
 - `CloudflareClient` servisi (Saloon), aktif tenant'ın token'ıyla çalışır;
   `GET /zones` "bağlantı testi".
 - Filament **SettingsPage**: gönderim sürücüsü seç, token güncelle, "Test et".
@@ -720,6 +755,10 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
   edilir. Hesap-başı `webhook_secret`; `X-CF-Account` ile doğrulama (Faz 4).
 - ✅ **Env değişince Worker redeploy:** Filesystem izleme yok; **config drift hash**
   + `cf:worker:sync` (idempotent) + Coolify post-deploy hook. Bkz. §5.1.2 ve §14.
+- ✅ **Cloudflare hesabı bağlama:** **Login with Cloudflare (OAuth) DEĞİL** — manuel
+  **scoped API token**; token template deep-link (izinler önceden seçili) +
+  `GET /accounts` ile otomatik hesap tespiti. En kolay ve self-host'a uygun.
+  OAuth ileride opsiyonel. Bkz. §8.2.1.
 
 ### Sonraki adım
 Faz 0'dan (config + Filament tenancy + `CloudflareAccount` modeli + bağlantı testi)
