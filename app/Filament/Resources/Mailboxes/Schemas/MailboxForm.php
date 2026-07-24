@@ -2,8 +2,12 @@
 
 namespace App\Filament\Resources\Mailboxes\Schemas;
 
+use App\Models\Domain;
+use Filament\Facades\Filament;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 
 class MailboxForm
@@ -11,12 +15,22 @@ class MailboxForm
     public static function configure(Schema $schema): Schema
     {
         return $schema->components([
-            TextInput::make('email')
-                ->label(__('Email address'))
-                ->email()
+            Select::make('domain_id')
+                ->label(__('Domain'))
+                ->options(fn () => Filament::getTenant()->domains()->orderBy('name')->pluck('name', 'id'))
                 ->required()
-                ->unique(ignoreRecord: true)
-                ->helperText(__('Must be an address on one of your domains. This is the login for the mailbox app.')),
+                ->native(false)
+                ->searchable()
+                ->live()
+                ->helperText(__('Pick one of your domains.')),
+
+            TextInput::make('local_part')
+                ->label(__('Address'))
+                ->placeholder('info')
+                ->required()
+                ->prefixIcon('heroicon-o-at-symbol')
+                ->suffix(fn (Get $get): string => '@'.(Domain::find($get('domain_id'))?->name ?? 'domain'))
+                ->helperText(__('The part before @. This becomes the login for the mailbox app.')),
 
             TextInput::make('display_name')
                 ->label(__('Display name'))

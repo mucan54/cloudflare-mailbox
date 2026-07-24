@@ -40,10 +40,12 @@ class MailboxResourceTest extends TestCase
     public function test_admin_creates_a_usable_mailbox(): void
     {
         $account = $this->boot();
+        $domain = $account->domains()->first();
 
         Livewire::test(CreateMailbox::class)
             ->fillForm([
-                'email' => 'support@a.com',
+                'domain_id' => $domain->id,
+                'local_part' => 'support',
                 'display_name' => 'Support',
                 'password' => 'password123',
                 'login_enabled' => true,
