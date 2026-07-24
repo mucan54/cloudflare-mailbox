@@ -19,7 +19,8 @@
 10. [Güvenlik](#10-güvenlik)
 11. [Test & CI](#11-test--ci)
 12. [Yol haritası (fazlar)](#12-yol-haritası)
-13. [Açık kararlar](#13-açık-kararlar)
+13. [Kararlar](#13-kararlar-netleşti)
+14. [Dağıtım (Coolify)](#14-dağıtım-coolify)
 
 ---
 
@@ -284,6 +285,27 @@ aksiyonu bu komutu tetikler ve çıktısını gösterir.
 `api_token` + `webhook_secret` (DB'de, şifreli), sunucuda `node`/`npx wrangler`
 kurulu olmalı.
 
+### 5.1.2 Değişiklikte otomatik redeploy (drift tespiti)
+
+`.env` dosyasını filesystem'de "izlemek" yerine **config drift** yaklaşımı
+kullanılır (container/Coolify ortamında tek sağlam yol):
+
+- **Hash:** `worker_config_hash = sha256(APP_URL + account_id + webhook_secret +
+  cf/src script sürümü + forward ayarı)`. Başarılı deploy sonrası tenant'a yazılır.
+- **`php artisan cf:worker:sync`** — tüm tenant'ları gezer, güncel hash ≠
+  `worker_config_hash` olanları yeniden deploy eder. **Idempotent**: kayma yoksa
+  hiçbir şey yapmaz (container her restart'ta boşa deploy etmez). `Cache::lock`
+  ile tenant başına eşzamanlı deploy engellenir.
+- **`php artisan cf:worker:status`** — hangi tenant güncel/kaymış/hiç-deploy-edilmemiş.
+- **DB kaynaklı değişiklik:** `CloudflareAccount` observer'ı; `account_id`,
+  `webhook_secret` veya sürücü alanları dirty ise `DeployWorkerJob` kuyruğa atılır.
+- **Env kaynaklı değişiklik (`APP_URL` vb.):** filesystem izleme yok →
+  **Coolify post-deploy hook** `cf:worker:sync` çalıştırır (bkz. §14). Env değişince
+  Coolify uygulamayı yeniden deploy eder, hook kaymış Worker'ları toparlar.
+- **Admin UI:** her tenant satırında **rozet** (güncel / kaymış / hiç deploy
+  edilmemiş) + **"Yeniden deploy"** butonu (`DeployWorkerJob`'ı tetikler, çıktıyı
+  gösterir).
+
 ### 5.2 Laravel webhook
 
 - Route: `POST /api/cf/incoming` (Filament auth dışı, kendi HMAC doğrulaması).
@@ -317,9 +339,11 @@ sürücüde de çalışacak şekilde portatif yazılır (bkz. [§11](#11-test--c
 
 - **cloudflare_accounts** *(tenant)* — `id, name, slug, account_id,
   api_token (encrypted), webhook_secret (encrypted), sending_driver (api|smtp),
-  worker_deployed_at, timestamps`
+  worker_deployed_at, worker_config_hash, timestamps`
   - `webhook_secret`: hesap-başı; Worker deploy'unda secret olarak aktarılır,
     webhook doğrulamasında kullanılır. `worker_deployed_at`: son deploy zamanı.
+  - `worker_config_hash`: en son deploy edilen config'in hash'i (drift tespiti;
+    bkz. §5.1.2).
 - **users** — mevcut tabloya dokunulmaz; tenancy pivot ile bağlanır
 - **cloudflare_account_user** *(pivot, üyelik)* — `cloudflare_account_id, user_id,
   role (owner|member), timestamps`
@@ -636,7 +660,11 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
   `X-CF-Account`) + `wrangler.toml.stub` + `package.json`.
 - **`php artisan cf:deploy-worker`** komutu: şablonu Laravel config/DB'den render
   eder, `wrangler deploy` + `secret put` çalıştırır; admin panelinde "Worker'ı
-  deploy et" aksiyonu. `cloudflare_accounts`'a `webhook_secret` + `worker_deployed_at`.
+  deploy et" aksiyonu. `cloudflare_accounts`'a `webhook_secret` + `worker_deployed_at`
+  + `worker_config_hash`.
+- **Drift/redeploy:** `cf:worker:sync` (kaymışları redeploy) + `cf:worker:status`;
+  `CloudflareAccount` observer → `DeployWorkerJob`; tenant satırında güncel/kaymış
+  rozeti (bkz. §5.1.2).
 - Laravel webhook route + `X-CF-Account`→hesap→per-account HMAC middleware +
   `StoreIncomingEmail` job (doğru tenant + `mailbox_id` çözümü).
 - Migration+Model: `emails` (portatif arama), thread bağlama; base64 ekler
@@ -662,7 +690,10 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
 - Redis + Horizon; queue izleme.
 - Pest test kapsamı + (ops.) GitHub Actions.
 - Çok kullanıcı gerekiyorsa `filament-shield` rolleri.
-- Dokümantasyon: kurulum (token oluşturma, Worker deploy, DNS) rehberi.
+- **Coolify dağıtımı (§14):** node+wrangler içeren image (Nixpacks/Dockerfile),
+  queue+scheduler process'leri, post-deploy hook (`migrate --force && cf:worker:sync`),
+  `cf:worker:sync`/`cf:worker:status` komutları + drift rozeti.
+- Dokümantasyon: kurulum (token oluşturma, Worker deploy, DNS, Coolify) rehberi.
 
 ---
 
@@ -687,7 +718,54 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
   `cf/`; ayarlar (webhook URL/secret/hesap) elle yazılmaz, `php artisan
   cf:deploy-worker` ile Laravel config/DB'den render edilip `wrangler deploy`
   edilir. Hesap-başı `webhook_secret`; `X-CF-Account` ile doğrulama (Faz 4).
+- ✅ **Env değişince Worker redeploy:** Filesystem izleme yok; **config drift hash**
+  + `cf:worker:sync` (idempotent) + Coolify post-deploy hook. Bkz. §5.1.2 ve §14.
 
 ### Sonraki adım
 Faz 0'dan (config + Filament tenancy + `CloudflareAccount` modeli + bağlantı testi)
 koda başlamaya hazır. Mailbox portalı Faz 5'te gelir (Inbox/Compose'a bağımlı).
+
+---
+
+## 14. Dağıtım (Coolify)
+
+Proje Coolify üzerinde (self-host PaaS) çalışacak şekilde tasarlanır. Ana Laravel
+uygulamasının yanında, gelen mail Worker'ı **uygulama container'ından** deploy
+edilir — bu yüzden runtime image'ın birkaç ek gereksinimi vardır.
+
+### 14.1 Runtime gereksinimleri (image)
+- PHP 8.3 + Laravel gereksinimleri.
+- **Node.js + `wrangler`** (Worker deploy için; `cf/` içinden `npx wrangler`).
+  Nixpacks'te `NIXPACKS_PKGS="nodejs"` veya özel Dockerfile ile eklenir.
+- Cloudflare API'ye **giden HTTPS** erişimi (Coolify ağ politikası).
+- Kalıcı disk gerekmez (ekler S3'te, DB harici MySQL). SQLite yalnız dev.
+
+### 14.2 Servisler
+- **web** (php-fpm/nginx veya `php artisan serve` değil — prod'da FrankenPHP/Octane
+  ya da nginx+fpm), **queue worker** (`php artisan queue:work`/Horizon),
+  **scheduler** (`php artisan schedule:work` veya cron) — Coolify'da ayrı process
+  veya ek "service" olarak.
+- **MySQL** ve (ops.) **Redis** Coolify managed servisleri.
+
+### 14.3 Env (Coolify secrets)
+`APP_KEY`, `APP_URL` (webhook tabanı — **doğru domain kritik**), `DB_*` (MySQL),
+`QUEUE_CONNECTION=redis` (ops.), `CLOUDFLARE_SEND_DRIVER`, S3 anahtarları
+(`AWS_*`, `AWS_ENDPOINT`), `CLOUDFLARE_ATTACHMENTS_DISK`. Tenant token/secret'ları
+DB'de (env değil).
+
+### 14.4 Deploy akışı & Worker senkronu
+Coolify **Post-deployment Command** (migration'la aynı yer):
+```
+php artisan migrate --force && php artisan cf:worker:sync
+```
+- Env'i Coolify'da değiştirince → Coolify uygulamayı **yeniden deploy eder** →
+  post-deploy hook `cf:worker:sync`'i çalıştırır → `APP_URL`/secret değişmiş tenant'
+  ların Worker'ı otomatik yeniden deploy olur (drift yoksa no-op).
+- İlk kurulumda / yeni tenant eklendiğinde admin panelden **"Worker'ı deploy et"**.
+- `wrangler` container'da yoksa `cf:worker:sync` net bir uyarı verir ve manuel
+  komutu (`cf/README.md`) gösterir — sessizce başarısız olmaz.
+
+> **Alternatif (isteğe bağlı):** Worker deploy'unu uygulama container'ından ayırıp
+> **GitHub Actions** ile yapmak isteyenler için `cf/` bağımsız çalışır; ama
+> env-güdümlü otomatik redeploy senaryosunda Coolify post-deploy hook yolu daha
+> düz. İki yol da desteklenir; README ikisini de belgeler.
