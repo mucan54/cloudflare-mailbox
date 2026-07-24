@@ -97,9 +97,10 @@ Push is off until you set a VAPID keypair. It can't be auto-generated (it's a st
 EC keypair — rotating it breaks every existing subscription), so generate it **once**
 and set two env vars:
 
-1. In the Coolify **Terminal** (or locally), run:
+1. In the Coolify **Terminal**, run (the `--show` flag prints the keys instead of
+   writing a `.env`, which the container doesn't have):
    ```bash
-   php artisan webpush:vapid
+   php artisan webpush:vapid --show
    ```
    It prints a `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`.
 2. Add both to Coolify → **Environment Variables** and redeploy.
