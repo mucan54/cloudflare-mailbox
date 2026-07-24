@@ -7,7 +7,9 @@ x-app-env: &app-env
   APP_NAME: "Cloudflare Mailbox"
   APP_ENV: production
   APP_DEBUG: "false"
-  APP_KEY: ${APP_KEY}
+  # Auto-generated & persisted by Coolify (SERVICE_REALBASE64_* = base64 of 32
+  # random bytes = a valid Laravel AES-256 key). No need to set APP_KEY yourself.
+  APP_KEY: base64:${SERVICE_REALBASE64_APPKEY}
   APP_URL: ${SERVICE_URL_APP}
 
   LOG_CHANNEL: stderr
@@ -36,10 +38,12 @@ x-app-env: &app-env
   AWS_ENDPOINT: ${AWS_ENDPOINT}
   AWS_USE_PATH_STYLE_ENDPOINT: "true"
 
-  # Web Push (generate once locally: php artisan webpush:generate)
-  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
-  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
-  VAPID_SUBJECT: ${VAPID_SUBJECT}
+  # Web Push. Subject auto-defaults to the app URL. The keypair is OPTIONAL:
+  # leave empty and the app runs with push disabled; generate once when you want
+  # push (php artisan webpush:generate) and set both — they must stay stable.
+  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+  VAPID_SUBJECT: ${VAPID_SUBJECT:-${SERVICE_URL_APP}}
 
   CLOUDFLARE_SEND_DRIVER: ${CLOUDFLARE_SEND_DRIVER:-api}
 
