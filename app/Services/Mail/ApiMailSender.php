@@ -17,7 +17,7 @@ class ApiMailSender implements MailSender
         try {
             $result = CloudflareClient::forAccount($account)->send($this->toApiPayload($message));
         } catch (CloudflareException $e) {
-            return SendResult::failed($e->getMessage(), ['errors' => $e->errors]);
+            return SendResult::failed($this->explain($e), ['errors' => $e->errors]);
         }
 
         if (! empty($result['permanent_bounces'])) {
@@ -29,6 +29,26 @@ class ApiMailSender implements MailSender
         }
 
         return SendResult::queued($result);
+    }
+
+    /**
+     * Turn a raw Cloudflare send error into an actionable message.
+     */
+    protected function explain(CloudflareException $e): string
+    {
+        $msg = $e->getMessage();
+
+        if (str_contains($msg, 'sending_disabled')) {
+            return $msg.' — Bu domain Cloudflare’de Email Sending için onboard edilmemiş '
+                .'(ya da yalnızca doğrulanmış hedeflere gönderime açık). Çözüm: Cloudflare Dashboard → '
+                .'Compute → Email Service → Email Sending → “Onboard Domain” ile domaini ekleyin.';
+        }
+
+        if (str_contains($msg, 'sender') && str_contains($msg, 'verif')) {
+            return $msg.' — Gönderen domain doğrulanmamış. Email Sending onboarding’ini (DKIM dahil) tamamlayın.';
+        }
+
+        return $msg;
     }
 
     /**
