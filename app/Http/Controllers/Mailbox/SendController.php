@@ -7,22 +7,61 @@ use App\Models\SentEmail;
 use App\Services\Mail\EmailSender;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class SendController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $sent = $request->user()->sentEmails()->latest('sent_at')->paginate(25);
+        $query = $request->user()->sentEmails()->latest('sent_at');
 
-        $sent->getCollection()->transform(fn (SentEmail $s) => [
-            'id' => $s->id,
-            'to' => $s->to,
-            'subject' => $s->subject,
-            'status' => $s->status,
-            'sent_at' => $s->sent_at?->toIso8601String(),
-        ]);
+        if ($search = $request->string('q')->toString()) {
+            $query->where(function ($q) use ($search) {
+                $q->where('subject', 'like', "%{$search}%")
+                    ->orWhere('text_body', 'like', "%{$search}%");
+            });
+        }
+
+        $sent = $query->paginate(min((int) $request->integer('per_page', 30), 100));
+
+        $sent->getCollection()->transform(fn (SentEmail $s) => $this->summary($s));
 
         return response()->json($sent);
+    }
+
+    public function show(Request $request, int $sent): JsonResponse
+    {
+        $model = $request->user()->sentEmails()->with('attachments')->findOrFail($sent);
+
+        return response()->json(['email' => array_merge($this->summary($model), [
+            'cc' => $model->cc,
+            'bcc' => $model->bcc,
+            'html_body' => $model->html_body,
+            'text_body' => $model->text_body,
+            'error' => $model->error,
+            'attachments' => $model->attachments->map(fn ($a) => [
+                'id' => $a->id,
+                'filename' => $a->filename,
+                'mime_type' => $a->mime_type,
+                'size' => $a->size,
+                'url' => $a->temporaryUrl(),
+            ]),
+        ])]);
+    }
+
+    private function summary(SentEmail $s): array
+    {
+        return [
+            'id' => $s->id,
+            'from_email' => $s->from_email,
+            'to' => $s->to,
+            'to_email' => implode(', ', (array) $s->to),
+            'subject' => $s->subject,
+            'snippet' => Str::limit(strip_tags((string) ($s->text_body ?: $s->html_body)), 140),
+            'status' => $s->status,
+            'sent_at' => $s->sent_at?->toIso8601String(),
+            'received_at' => $s->sent_at?->toIso8601String(),
+        ];
     }
 
     public function store(Request $request, EmailSender $sender): JsonResponse

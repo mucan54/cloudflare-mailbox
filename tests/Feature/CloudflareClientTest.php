@@ -45,6 +45,37 @@ class CloudflareClientTest extends TestCase
         $this->assertSame('acc1', $accounts[0]['id']);
     }
 
+    public function test_email_routing_dns_normalises_flat_list(): void
+    {
+        Http::fake([
+            '*/email/routing/dns' => Http::response($this->ok([
+                ['type' => 'MX', 'name' => 'a.com', 'content' => 'route1.mx.cloudflare.net', 'priority' => 1],
+                ['type' => 'TXT', 'name' => 'a.com', 'content' => 'v=spf1 include:_spf.mx.cloudflare.net ~all'],
+            ])),
+        ]);
+
+        $records = (new CloudflareClient('tok', 'acc'))->emailRoutingDns('zone1');
+
+        $this->assertCount(2, $records);
+        $this->assertSame('MX', $records[0]['type']);
+    }
+
+    public function test_email_routing_dns_normalises_record_wrapper(): void
+    {
+        Http::fake([
+            '*/email/routing/dns' => Http::response($this->ok([
+                'record' => [
+                    ['type' => 'TXT', 'name' => 'a.com', 'content' => 'v=spf1 include:_spf.mx.cloudflare.net ~all'],
+                ],
+            ])),
+        ]);
+
+        $records = (new CloudflareClient('tok', 'acc'))->emailRoutingDns('zone1');
+
+        $this->assertCount(1, $records);
+        $this->assertSame('TXT', $records[0]['type']);
+    }
+
     public function test_list_zones_follows_pagination(): void
     {
         $page = 0;

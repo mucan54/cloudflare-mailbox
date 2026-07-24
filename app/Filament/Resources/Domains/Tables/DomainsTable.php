@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Domains\Tables;
 
+use App\Filament\Support\SendingDnsGuide;
 use App\Services\Cloudflare\CloudflareException;
 use App\Services\Cloudflare\RoutingManager;
 use App\Services\Cloudflare\WorkerDeployer;
@@ -11,6 +12,7 @@ use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Contracts\View\View;
 
 class DomainsTable
 {
@@ -18,6 +20,19 @@ class DomainsTable
     {
         return $table
             ->recordActions([
+                Action::make('sendingDns')
+                    ->label('DNS kayıtları')
+                    ->icon('heroicon-o-shield-check')
+                    ->color('gray')
+                    ->visible(fn ($record) => (bool) $record->zone_id)
+                    ->modalHeading(fn ($record) => $record->name.' — Gönderim DNS kayıtları')
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Kapat')
+                    ->modalContent(fn ($record): View => view(
+                        'filament.sending-dns-guide',
+                        SendingDnsGuide::build(Filament::getTenant(), $record),
+                    )),
+
                 Action::make('catchAllToWorker')
                     ->label('Catch-all → Worker')
                     ->icon('heroicon-o-inbox-arrow-down')

@@ -161,6 +161,27 @@ class CloudflareClient
         return $this->get("/zones/{$zoneId}/email/routing")['result'] ?? [];
     }
 
+    /**
+     * The DNS records Cloudflare recommends for email on this zone (MX + SPF,
+     * and DKIM when Cloudflare manages it). Used to guide sender-authentication
+     * setup so outbound mail is not bounced by strict receivers (Outlook/Gmail).
+     *
+     * The API has shipped two response shapes — a flat record list and an
+     * `{ record: [...] }` wrapper — so we normalise both.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function emailRoutingDns(string $zoneId): array
+    {
+        $result = $this->get("/zones/{$zoneId}/email/routing/dns")['result'] ?? [];
+
+        if (isset($result['record']) && is_array($result['record'])) {
+            return $result['record'];
+        }
+
+        return array_is_list($result) ? $result : [];
+    }
+
     // --- Destination addresses (account-level) ---------------------------
 
     /**

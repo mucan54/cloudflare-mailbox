@@ -14,50 +14,16 @@ import PostalMime from "postal-mime";
  */
 export default {
   async email(message, env, ctx) {
-    const parsed = await PostalMime.parse(message.raw);
-
-    const inlineMax = parseInt(env.INLINE_ATTACHMENT_MAX ?? "2097152", 10);
-    const attachments = (parsed.attachments ?? []).map((a) => {
-      const bytes = a.content?.byteLength ?? 0;
-      const base = {
-        filename: a.filename,
-        mimeType: a.mimeType,
-        contentId: a.contentId,
-        size: bytes,
-      };
-      if (bytes > 0 && bytes <= inlineMax) {
-        base.content = toBase64(a.content);
-      } else {
-        base.too_large = true; // large attachment: deliver metadata only
-      }
-      return base;
-    });
-
-    const payload = {
-      message_id: message.headers.get("Message-ID"),
-      in_reply_to: message.headers.get("In-Reply-To"),
-      references: (message.headers.get("References") ?? "")
-        .split(/\s+/)
-        .filter(Boolean),
-      envelope_from: message.from,
-      envelope_to: message.to,
-      subject: parsed.subject,
-      text: parsed.text,
-      html: parsed.html,
-      from: parsed.from,
-      to: parsed.to,
-      cc: parsed.cc,
-      date: parsed.date,
-      headers: [...message.headers],
-      attachments,
-      raw_size: message.rawSize,
-    };
-
-    const body = JSON.stringify(payload);
-    const ts = `${Date.now()}`;
-    const signature = await hmacSha256Hex(env.WEBHOOK_SECRET, `${ts}.${body}`);
-
+    // Whole-handler guard: an Email Worker that *throws* makes Cloudflare bounce
+    // the message with a "521 Upstream error". We never want that — parsing,
+    // encoding, or delivery problems must degrade to accept/forward, never a
+    // bounce. So everything runs inside try/catch.
     try {
+      const payload = await buildPayload(message, env);
+      const body = JSON.stringify(payload);
+      const ts = `${Date.now()}`;
+      const signature = await hmacSha256Hex(env.WEBHOOK_SECRET, `${ts}.${body}`);
+
       const res = await fetch(env.WEBHOOK_URL, {
         method: "POST",
         headers: {
@@ -70,7 +36,8 @@ export default {
       });
       if (!res.ok) throw new Error(`webhook responded ${res.status}`);
     } catch (err) {
-      // Do NOT throw — throwing bounces the mail. Fall back to forwarding.
+      // Do NOT rethrow — throwing bounces the mail. Fall back to forwarding
+      // when configured, otherwise silently accept so nothing bounces.
       if (env.FALLBACK_FORWARD_TO) {
         try {
           await message.forward(env.FALLBACK_FORWARD_TO);
@@ -81,6 +48,47 @@ export default {
     }
   },
 };
+
+async function buildPayload(message, env) {
+  const parsed = await PostalMime.parse(message.raw);
+
+  const inlineMax = parseInt(env.INLINE_ATTACHMENT_MAX ?? "2097152", 10);
+  const attachments = (parsed.attachments ?? []).map((a) => {
+    const bytes = a.content?.byteLength ?? 0;
+    const base = {
+      filename: a.filename,
+      mimeType: a.mimeType,
+      contentId: a.contentId,
+      size: bytes,
+    };
+    if (bytes > 0 && bytes <= inlineMax) {
+      base.content = toBase64(a.content);
+    } else {
+      base.too_large = true; // large attachment: deliver metadata only
+    }
+    return base;
+  });
+
+  return {
+    message_id: message.headers.get("Message-ID"),
+    in_reply_to: message.headers.get("In-Reply-To"),
+    references: (message.headers.get("References") ?? "")
+      .split(/\s+/)
+      .filter(Boolean),
+    envelope_from: message.from,
+    envelope_to: message.to,
+    subject: parsed.subject,
+    text: parsed.text,
+    html: parsed.html,
+    from: parsed.from,
+    to: parsed.to,
+    cc: parsed.cc,
+    date: parsed.date,
+    headers: [...message.headers],
+    attachments,
+    raw_size: message.rawSize,
+  };
+}
 
 async function hmacSha256Hex(secret, data) {
   const key = await crypto.subtle.importKey(
