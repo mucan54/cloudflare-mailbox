@@ -26,6 +26,19 @@ class DomainsTable
                     ->visible(fn ($record) => (bool) $record->zone_id && $record->inbound_capture !== 'catch_all')
                     ->action(function ($record) {
                         $account = Filament::getTenant();
+
+                        // The Worker must exist before it can be a catch-all target.
+                        if (! $account->isWorkerDeployed()) {
+                            Notification::make()
+                                ->title('Önce Worker’ı deploy edin')
+                                ->body('Bu domaini Worker’a bağlamadan önce üstteki “Deploy Worker” ile gelen mail Worker’ını deploy edin.')
+                                ->warning()
+                                ->persistent()
+                                ->send();
+
+                            return;
+                        }
+
                         $workerName = (new WorkerDeployer($account))->workerName();
                         try {
                             (new RoutingManager($account))->setCatchAllToWorker($record, $workerName);

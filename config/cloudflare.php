@@ -49,11 +49,13 @@ return [
     'token_template' => [
         'name' => 'Cloudflare Mailbox',
         'dashboard_url' => 'https://dash.cloudflare.com/profile/api-tokens',
+        // Only these two pre-fill reliably via the template link (Cloudflare
+        // exposes no stable short key for Email Routing). The two Email Routing
+        // permissions must be added manually on the token page — the onboarding /
+        // settings UI instructs the user to do so.
         'permission_groups' => [
-            ['key' => 'email_routing_addresses', 'type' => 'edit'], // Account
-            ['key' => 'email_routing_rules', 'type' => 'edit'],     // Zone
-            ['key' => 'email_sending', 'type' => 'edit'],           // Account (confirmed)
-            ['key' => 'zone', 'type' => 'read'],                    // Zone (confirmed)
+            ['key' => 'email_sending', 'type' => 'edit'], // Account
+            ['key' => 'zone', 'type' => 'read'],          // Zone
         ],
     ],
 
