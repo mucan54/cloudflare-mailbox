@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloudflare Mailbox — self-hosted mail on your own domains</title>
+<meta name="description" content="A multi-tenant web mail service on Cloudflare Email Service. Laravel + Filament admin, a headless Vue PWA mailbox, sending & receiving on your own domains.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23f59e0b'/%3E%3Cpath d='M22 32h56v36H22z' fill='none' stroke='%23111' stroke-width='5'/%3E%3Cpath d='M22 32l28 22 28-22' fill='none' stroke='%23111' stroke-width='5'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121923; --border:#1f2937; --text:#e7edf3;
+    --muted:#93a1b2; --accent:#f59e0b; --accent2:#38bdf8;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.6}
+  a{color:inherit}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+  .nav{display:flex;align-items:center;justify-content:space-between;padding:22px 0}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px}
+  .logo{width:30px;height:30px;border-radius:8px;background:var(--accent);display:grid;place-items:center;color:#111;font-weight:800}
+  .btn{display:inline-block;background:var(--accent);color:#111;font-weight:600;
+    padding:11px 18px;border-radius:11px;text-decoration:none;font-size:15px;border:none;cursor:pointer}
+  .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+  .hero{padding:70px 0 40px;text-align:center}
+  .badge{display:inline-block;font-size:13px;color:var(--accent);border:1px solid #3a2f10;
+    background:#1a1408;padding:5px 12px;border-radius:999px;margin-bottom:22px}
+  h1{font-size:clamp(34px,6vw,56px);line-height:1.1;margin:0 0 18px;letter-spacing:-.02em}
+  h1 .grad{background:linear-gradient(90deg,var(--accent),#fbbf24);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lead{font-size:clamp(16px,2.5vw,20px);color:var(--muted);max-width:660px;margin:0 auto 30px}
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin:26px 0}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:22px}
+  .card h3{margin:.2rem 0 .4rem;font-size:17px}
+  .card p{margin:0;color:var(--muted);font-size:15px}
+  .ic{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;
+    background:#1a2230;font-size:20px;margin-bottom:6px}
+  section{padding:46px 0}
+  .section-title{text-align:center;margin:0 0 6px;font-size:28px}
+  .section-sub{text-align:center;color:var(--muted);margin:0 auto 26px;max-width:600px}
+  .flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+  .step{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px}
+  .step .n{width:26px;height:26px;border-radius:8px;background:var(--accent);color:#111;
+    font-weight:700;display:grid;place-items:center;font-size:14px;margin-bottom:8px}
+  .step b{display:block;margin-bottom:2px}
+  .step span{color:var(--muted);font-size:14px}
+  .stack{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+  .chip{background:var(--panel);border:1px solid var(--border);border-radius:999px;padding:8px 15px;font-size:14px;color:var(--muted)}
+  .cols2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:720px){.cols2{grid-template-columns:1fr}}
+  ul.feat{list-style:none;padding:0;margin:0}
+  ul.feat li{padding:8px 0;border-bottom:1px solid var(--border);color:var(--muted)}
+  ul.feat li::before{content:"✓";color:var(--accent);font-weight:700;margin-right:10px}
+  footer{border-top:1px solid var(--border);padding:26px 0;color:var(--muted);text-align:center;font-size:14px}
+  .note{background:#0e1622;border:1px solid var(--border);border-radius:12px;padding:14px 16px;color:var(--muted);font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav">
+    <div class="brand"><span class="logo">M</span> Cloudflare Mailbox</div>
+    <a class="btn ghost" href="https://github.com/mucan54/cloudflare-mailbox">GitHub ↗</a>
+  </nav>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="badge">Self-hosted · Multi-tenant · PWA</span>
+    <h1>Your own <span class="grad">mail service</span><br>on Cloudflare</h1>
+    <p class="lead">Send and receive email on your own domains with Cloudflare Email Service —
+      a Laravel&nbsp;+&nbsp;Filament admin panel and a native-feeling Vue PWA mailbox with push notifications.</p>
+    <div class="cta">
+      <a class="btn" href="https://github.com/mucan54/cloudflare-mailbox">Get it on GitHub</a>
+      <a class="btn ghost" href="#how">How it works</a>
+    </div>
+  </div>
+</header>
+
+<section class="wrap">
+  <div class="grid">
+    <div class="card"><div class="ic">📬</div><h3>Full inbox, not just forwarding</h3>
+      <p>A Cloudflare Email Worker captures inbound mail and stores it, so every address gets a real, searchable inbox.</p></div>
+    <div class="card"><div class="ic">✈️</div><h3>Send from your domains</h3>
+      <p>Cloudflare REST API or SMTP, switchable in config, with delivered / queued / bounced status.</p></div>
+    <div class="card"><div class="ic">🏢</div><h3>Multi-tenant</h3>
+      <p>One Cloudflare account = one tenant. Manage domains, routing rules and mailboxes per account.</p></div>
+    <div class="card"><div class="ic">📱</div><h3>Installable PWA + push</h3>
+      <p>A headless Vue mailbox at <code>/</code> with Web Push “new mail” alerts — installable on Android &amp; iOS.</p></div>
+    <div class="card"><div class="ic">🔐</div><h3>Per-address login</h3>
+      <p>Each mailbox has its own email + password. People log in and see only their own mail.</p></div>
+    <div class="card"><div class="ic">🚀</div><h3>One-command deploy</h3>
+      <p>Docker Compose stack for Coolify (app + MySQL + Redis + worker) — the inbound Worker deploys from the container.</p></div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <h2 class="section-title">How it works</h2>
+    <p class="section-sub">Connect Cloudflare once, then send and receive on your domains.</p>
+    <div class="flow">
+      <div class="step"><div class="n">1</div><b>Connect</b><span>Paste a scoped Cloudflare API token; the account is auto-detected.</span></div>
+      <div class="step"><div class="n">2</div><b>Sync</b><span>Pull your domains, routing rules and destination addresses.</span></div>
+      <div class="step"><div class="n">3</div><b>Deploy Worker</b><span>Catch-all → Worker captures all inbound mail to your inbox.</span></div>
+      <div class="step"><div class="n">4</div><b>Create mailboxes</b><span>Give each address a password; users log into the PWA.</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <div class="cols2">
+    <div class="card">
+      <h3>Admin panel</h3>
+      <ul class="feat">
+        <li>One-click token onboarding</li>
+        <li>Domain, routing-rule &amp; address management</li>
+        <li>Compose &amp; sent log with delivery status</li>
+        <li>Inbound Worker deploy &amp; drift detection</li>
+        <li>Dashboard stats &amp; setup checklist</li>
+        <li>English / Türkçe</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Mailbox app (PWA)</h3>
+      <ul class="feat">
+        <li>Native-feeling inbox &amp; reader</li>
+        <li>Compose &amp; reply</li>
+        <li>Web Push “new mail” notifications</li>
+        <li>Install to Home Screen (Android &amp; iOS)</li>
+        <li>Token API — mobile-ready</li>
+        <li>Light / dark theme</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2 class="section-title">Built with</h2>
+  <p class="section-sub">Boring, proven tech.</p>
+  <div class="stack">
+    <span class="chip">Laravel 13</span>
+    <span class="chip">Filament 5</span>
+    <span class="chip">Vue 3 + Vite</span>
+    <span class="chip">Sanctum</span>
+    <span class="chip">Cloudflare Email Workers</span>
+    <span class="chip">Web Push (VAPID)</span>
+    <span class="chip">MySQL · Redis</span>
+    <span class="chip">Docker / Coolify</span>
+  </div>
+</section>
+
+<section class="wrap">
+  <div class="note">
+    <b>Note:</b> Cloudflare does not provide a mailbox/inbox API — Email Routing only forwards.
+    This project adds the missing piece: an Email Worker that stores inbound mail so you get a
+    real inbox, plus a multi-tenant admin and an installable mailbox app.
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Cloudflare Mailbox · MIT licensed ·
+    <a href="https://github.com/mucan54/cloudflare-mailbox">github.com/mucan54/cloudflare-mailbox</a><br>
+    Not affiliated with Cloudflare, Inc.
+  </div>
+</footer>
+</body>
+</html>
