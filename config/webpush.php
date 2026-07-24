@@ -9,7 +9,8 @@ return [
      * These keys must be safely stored and should not change.
      */
     'vapid' => [
-        'subject' => env('VAPID_SUBJECT'),
+        // Falls back to the app URL so it never needs to be set manually.
+        'subject' => env('VAPID_SUBJECT') ?: env('APP_URL', 'https://localhost'),
         'public_key' => env('VAPID_PUBLIC_KEY'),
         'private_key' => env('VAPID_PRIVATE_KEY'),
         'pem_file' => env('VAPID_PEM_FILE'),
