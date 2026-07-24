@@ -49,6 +49,18 @@ class AdminPanelSmokeTest extends TestCase
             ->assertSuccessful();
     }
 
+    public function test_inbox_and_sent_pages_render(): void
+    {
+        [$user, $account] = $this->tenantUser();
+        $account->emails()->create([
+            'ingest_key' => 'k1', 'to_email' => 'me@a.com', 'from_email' => 's@x.com',
+            'subject' => 'Hi', 'received_at' => now(),
+        ]);
+
+        $this->actingAs($user)->get("/admin/{$account->slug}/emails")->assertSuccessful()->assertSee('Hi');
+        $this->actingAs($user)->get("/admin/{$account->slug}/sent-emails")->assertSuccessful();
+    }
+
     public function test_tenant_scoping_hides_other_tenant_data(): void
     {
         [$user, $account] = $this->tenantUser();
