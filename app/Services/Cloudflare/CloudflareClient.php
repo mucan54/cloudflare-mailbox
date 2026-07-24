@@ -139,11 +139,11 @@ class CloudflareClient
         $page = 1;
 
         do {
-            $res = $this->get('/zones', [
+            $res = $this->get('/zones', array_filter([
                 'per_page' => 50,
                 'page' => $page,
-                'account.id' => $this->accountId,
-            ]);
+                'account.id' => $this->accountId, // omitted when not yet known (onboarding)
+            ], fn ($v) => $v !== null));
             $all = array_merge($all, $res['result'] ?? []);
             $info = $res['result_info'] ?? [];
             $totalPages = (int) ($info['total_pages'] ?? 1);

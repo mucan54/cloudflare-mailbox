@@ -36,7 +36,7 @@ class FullSyncAction
                 }
 
                 try {
-                    $counts = (new AccountSynchronizer($account))->full();
+                    $result = (new AccountSynchronizer($account))->full();
                 } catch (CloudflareException $e) {
                     Notification::make()
                         ->title('Senkron başarısız')
@@ -47,10 +47,25 @@ class FullSyncAction
                     return;
                 }
 
+                $counts = $result['counts'];
+                $errors = $result['errors'];
+                $summary = "Domain: {$counts['domains']} · Adres: {$counts['addresses']} · Kural: {$counts['rules']}";
+
+                if (empty($errors)) {
+                    Notification::make()->title('Senkron tamamlandı')->body($summary)->success()->send();
+
+                    return;
+                }
+
+                // Partial success — most commonly a missing Email Routing permission.
+                $failed = implode(', ', array_keys($errors));
                 Notification::make()
-                    ->title('Senkron tamamlandı')
-                    ->body("Domain: {$counts['domains']} · Adres: {$counts['addresses']} · Kural: {$counts['rules']}")
-                    ->success()
+                    ->title('Senkron kısmen tamamlandı')
+                    ->body($summary."\n\nAlınamayan: {$failed}. Token’ınızda "
+                        .'“Email Routing: Edit” izni eksik olabilir — Cloudflare’de token’ı '
+                        .'düzenleyip bu izni ekleyin, sonra tekrar deneyin.')
+                    ->warning()
+                    ->persistent()
                     ->send();
             });
     }

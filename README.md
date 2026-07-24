@@ -83,8 +83,12 @@ included [`docker-compose.yaml`](docker-compose.yaml). It builds the
    MySQL, Redis, the queue worker and the scheduler come up on their own; migrations
    run on boot (serversideup AUTORUN). Web Push is off until you set a VAPID keypair
    (see below).
-3. **Deploy**, then open `https://<your-domain>/admin` and create the admin user from
-   the Coolify **Terminal**: `php artisan db:seed`.
+3. **Deploy**, then create your admin user from the Coolify **Terminal** with your own
+   credentials (don't use the insecure default seeder in production):
+   ```bash
+   php artisan app:create-admin you@yourdomain.com --name="You"
+   ```
+   It prompts for a password, then you can log in at `https://<your-domain>/admin`.
 4. Deploy the inbound Worker from the admin panel's **Deploy Worker** action (or the
    Coolify Terminal: `php artisan cf:worker:sync`).
 
