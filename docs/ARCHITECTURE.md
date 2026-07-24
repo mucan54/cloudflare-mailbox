@@ -48,6 +48,13 @@ altında birleştirdi. İki yönü vardır:
 - Hedef adresler **hesap seviyesinde** paylaşılır; routing kuralları **zone (domain)
   seviyesindedir**. Doğrulanmamış hedefe giden kural otomatik pasifleşir.
 
+**Multi-tenancy:** Uygulama **çok kiracılı (multi-tenant)** kurgulanır. Her
+**Cloudflare hesabı = bir tenant**; bu, Cloudflare'in kendi `account_id`-bazlı
+kapsama modeliyle birebir örtüşür. Filament v5'in **yerleşik tenancy** desteği
+kullanılır: tüm kaynaklar (domain, kural, adres, inbox, giden) aktif tenant'a
+scope'lanır, panelde tenant switcher bulunur, kullanıcılar hesaplara pivot tablo
+ile üye olur. Ayrıntı: [§8.1](#81-multi-tenancy-filament).
+
 ---
 
 ## 2. Yüksek seviye mimari
@@ -246,20 +253,30 @@ Worker eki R2'ye koyar, Laravel key ile indirir/gösterir).
 
 ## 6. Veri modeli
 
-Öngörülen tablolar (SQLite → prod'da MySQL/Postgres):
+Öngörülen tablolar. **Geliştirmede SQLite, üretimde MySQL** — migration'lar iki
+sürücüde de çalışacak şekilde portatif yazılır (bkz. [§11](#11-test--ci)).
 
-- **cloudflare_accounts** — `id, label, account_id, api_token (encrypted),
-  sending_driver, is_default, timestamps`
+> **Tenant kolonu:** `cloudflare_accounts` **tenant** tablosudur. Ona bağlı tüm
+> tablolar `cloudflare_account_id` taşır ve Filament tenancy ile otomatik
+> scope'lanır. Domain'e bağlı tablolarda (emails, routing_rules) verimli scope
+> için `cloudflare_account_id` **doğrudan da** tutulur (domain üzerinden JOIN'e
+> gerek kalmadan tenant filtresi).
+
+- **cloudflare_accounts** *(tenant)* — `id, name (slug/label), account_id,
+  api_token (encrypted), sending_driver (api|smtp), timestamps`
+- **users** — mevcut tabloya dokunulmaz; tenancy pivot ile bağlanır
+- **cloudflare_account_user** *(pivot, üyelik)* — `cloudflare_account_id, user_id,
+  role (owner|member), timestamps`
 - **domains** — `id, cloudflare_account_id, zone_id, name, status,
   routing_enabled, dns_verified (spf/dkim/dmarc json), last_synced_at, timestamps`
 - **destination_addresses** — `id, cloudflare_account_id, cf_id, email, verified_at,
   timestamps`
 - **routing_rules** — `id, domain_id, cf_id, name, matcher (local part),
   actions (json: forward/worker/drop), enabled, priority, is_catch_all, timestamps`
-- **emails** (inbox) — `id, domain_id, message_id, in_reply_to, references (json),
-  from_name, from_email, to_email, cc (json), subject, text_body, html_body,
-  headers (json), raw_size, spam_score(null), read_at, starred, folder,
-  received_at, timestamps` (+ full-text arama indeksleri)
+- **emails** (inbox) — `id, cloudflare_account_id, domain_id, message_id,
+  in_reply_to, references (json), from_name, from_email, to_email, cc (json),
+  subject, text_body, html_body, headers (json), raw_size, read_at, starred,
+  folder, received_at, timestamps` (+ portatif arama; bkz. §11)
 - **sent_emails** — `id, cloudflare_account_id, domain_id, driver (api|smtp),
   from_email, to (json), cc (json), bcc (json), subject, html_body, text_body,
   status (queued/delivered/bounced/failed), cf_response (json), error, sent_at,
@@ -285,9 +302,35 @@ return [
         'secret'          => env('CLOUDFLARE_WEBHOOK_SECRET'),
         'tolerance_secs'  => 300,
     ],
-    'attachments_disk' => env('CLOUDFLARE_ATTACHMENTS_DISK', 'r2'), // veya 'local'
+    // Ek dosya deposu config'den ayarlanabilir; S3 uyumlu (AWS S3 / Cloudflare R2 /
+    // MinIO) veya yerel disk. Değer bir Laravel filesystem "disk" adıdır.
+    'attachments_disk' => env('CLOUDFLARE_ATTACHMENTS_DISK', 's3'), // 's3' | 'local'
 ];
 ```
+
+`config/filesystems.php` → S3 uyumlu disk (aynı disk hem AWS S3 hem R2/MinIO için
+kullanılır; sadece `endpoint`/bölge değişir):
+
+```php
+'disks' => [
+    // ...
+    's3' => [
+        'driver'   => 's3',
+        'key'      => env('AWS_ACCESS_KEY_ID'),
+        'secret'   => env('AWS_SECRET_ACCESS_KEY'),
+        'region'   => env('AWS_DEFAULT_REGION', 'auto'),
+        'bucket'   => env('AWS_BUCKET'),
+        'endpoint' => env('AWS_ENDPOINT'),          // R2/MinIO için; AWS'de boş
+        'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+        'visibility' => 'private',                  // ekler private; imzalı URL ile indirilir
+    ],
+],
+```
+
+> **Veritabanı:** Geliştirmede **SQLite** (repo varsayılanı), üretimde **MySQL**.
+> Kod tek `DB_CONNECTION` env'i ile çalışır; migration'lar iki sürücüde de geçerli
+> olacak biçimde yazılır (bkz. [§11](#11-test--ci)). `s3` diski AWS S3, Cloudflare
+> R2 ve MinIO ile aynı sürücüyü kullandığından uygulama kodu değişmez.
 
 `config/mail.php` → `mailers.cloudflare` (SMTP sürücüsü):
 
@@ -304,11 +347,37 @@ return [
 
 `.env.example` eklenecekler: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`,
 `CLOUDFLARE_SEND_DRIVER`, `CLOUDFLARE_WEBHOOK_SECRET`, `CLOUDFLARE_ATTACHMENTS_DISK`
-+ R2 (S3 uyumlu) disk anahtarları.
++ S3 uyumlu disk anahtarları (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+`AWS_DEFAULT_REGION`, `AWS_BUCKET`, `AWS_ENDPOINT`, `AWS_USE_PATH_STYLE_ENDPOINT`).
+
+> **Not:** `account_id`/`api_token` env değerleri yalnızca fallback/ilk kurulum
+> içindir. Multi-tenant modelde asıl kaynak **`cloudflare_accounts` tablosudur**;
+> her tenant kendi hesap ID'si ve şifreli token'ını taşır.
 
 ---
 
 ## 8. Filament arayüz yapısı
+
+### 8.1 Multi-tenancy (Filament)
+
+- **Tenant modeli:** `CloudflareAccount`. `AdminPanelProvider`'da
+  `->tenant(CloudflareAccount::class, slugAttribute: 'slug')` ile etkinleştirilir.
+- **Üyelik:** `User` ↔ `CloudflareAccount` çok-a-çok (`cloudflare_account_user`
+  pivot). `User` modeli `HasTenants` sözleşmesini uygular
+  (`getTenants()`, `canAccessTenant()`); Panel'e `->tenantMenu()` ve tenant
+  switcher eklenir.
+- **Kapsama:** Tenant'a ait her Resource'ta Filament otomatik olarak
+  `cloudflare_account_id` ile scope uygular (ilişki üzerinden). Doğrudan bu kolonu
+  taşımayan tablolarda `getTenantOwnershipRelationshipName()` ile ilişki belirtilir.
+- **Tenant kaydı/onboarding:** Yeni Cloudflare hesabı ekleme, Filament
+  **tenant registration** sayfası ile yapılır (hesap ID + token gir → `GET /zones`
+  ile doğrula). Token tenant kaydında `encrypted` saklanır.
+- **Global kaynaklar:** Cloudflare'de hedef adresler hesap seviyesinde olduğundan,
+  `DestinationAddressResource` de tenant'a scope'ludur (hesap = tenant).
+- **URL yapısı:** `/{tenant-slug}/domains`, `/{tenant-slug}/inbox` … Böylece
+  Cloudflare'in account-scoped modeliyle birebir aynı zihinsel model korunur.
+
+### 8.2 Kaynaklar & sayfalar
 
 `app/Filament/Resources/` ve `Pages/`, `Widgets/`:
 
@@ -331,8 +400,8 @@ return [
 - **Widget'lar** — son 24s teslim/queue/bounce; okunmamış sayısı; domain sağlık
   durumu; son gelen mailler.
 
-Yetkilendirme: tek kullanıcı yeterliyse Filament auth; çok kullanıcı/rol gerekirse
-`bezhanSalleh/filament-shield`.
+Yetkilendirme: Filament auth + **tenant üyeliği** (pivot `role`: owner/member).
+Tenant içi ince rol/izin gerekirse `bezhanSalleh/filament-shield` eklenir.
 
 ---
 
@@ -345,9 +414,9 @@ Yetkilendirme: tek kullanıcı yeterliyse Filament auth; çok kullanıcı/rol ge
 | `saloonphp/saloon` (+ `saloonphp/laravel-plugin`) | Önerilen | Cloudflare API client (request sınıfları, auth, retry, `Http::fake` yerine mock). Alternatif: yerleşik `Http` facade (paketsiz). |
 | `laravel/horizon` + Redis | Prod önerilir | Kuyruk (webhook işleme, giden gönderim). Dev'de `database` queue yeter. |
 | `zbateson/mail-mime-parser` | Şartlı | Ham MIME'yi Laravel tarafında parse gerekirse (asıl parse Worker'da postal-mime ile yapılırsa gerekmez). |
-| `league/flysystem-aws-s3-v3` | Şartlı | R2 (S3 uyumlu) ek depolama için. |
+| `league/flysystem-aws-s3-v3` | **Gerekli** | S3 uyumlu ek depolama (AWS S3 / R2 / MinIO). |
 | `spatie/laravel-data` | Opsiyonel | DTO'lar / temiz payload tipleri. |
-| `bezhanSalleh/filament-shield` | Opsiyonel | Rol/izin (multi-user olursa). |
+| `bezhanSalleh/filament-shield` | Opsiyonel | Tenant içi ince rol/izin gerekirse. |
 | `pestphp/pest` | Önerilen | Test (composer'da plugin izni açık). |
 
 > Filament v5 zaten `composer.json`'da. Notifications/Widgets Filament ile gelir,
@@ -384,10 +453,25 @@ Yetkilendirme: tek kullanıcı yeterliyse Filament auth; çok kullanıcı/rol ge
 
 - **Pest** ile: `CloudflareClient` (Saloon mock / `Http::fake`), webhook imza
   doğrulama, StoreIncomingEmail job, MailSender (api & smtp) birim testleri;
-  Filament Resource smoke testleri (Livewire test helper'ları).
-- `composer test` mevcut script'e bağlanır.
+  Filament Resource smoke testleri (Livewire test helper'ları) + **tenant izolasyon
+  testi** (bir tenant başka tenant'ın verisini görmemeli).
+- `composer test` mevcut script'e bağlanır (geliştirmede SQLite ile).
 - Lint: `laravel/pint` (zaten dev dep).
 - (Opsiyonel) GitHub Actions: pint + pest.
+
+**SQLite (dev) ↔ MySQL (prod) portatifliği — dikkat edilecekler:**
+
+- JSON kolonlar için Laravel'in `json` kolon tipi + `array`/`AsCollection` cast'i
+  (her iki sürücüde çalışır).
+- **Arama** sürücü-farkından etkilenmesin: MySQL `FULLTEXT` vs SQLite `FTS5`
+  taşınabilir değil. Bu yüzden inbox aramasında **sürücü-bağımsız** yaklaşım:
+  varsayılan `LIKE`/`where` tabanlı arama; prod'da performans gerekirse
+  **Laravel Scout (database driver)** veya MySQL `FULLTEXT` migration'ı sürücü
+  kontrolüyle (`DB::connection()->getDriverName()`) koşullu eklenir.
+- Migration'larda sürücüye özel ham SQL'den kaçınılır; gerekirse
+  `Schema::hasColumn`/driver kontrolü ile koşullandırılır.
+- Boolean/tarih varsayılanları framework helper'larıyla verilir (ham SQL default
+  yerine).
 
 ---
 
@@ -395,13 +479,18 @@ Yetkilendirme: tek kullanıcı yeterliyse Filament auth; çok kullanıcı/rol ge
 
 Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
 
-### Faz 0 — İskele & bağlantı
+### Faz 0 — İskele, multi-tenancy & bağlantı
 - `config/cloudflare.php`, `.env.example` güncelle, `config/mail.php` `cloudflare`
-  mailer.
-- Migration + Model: `cloudflare_accounts` (encrypted token).
-- `CloudflareClient` servisi (Saloon) + `GET /zones` "bağlantı testi".
-- Filament **SettingsPage**: hesap/token gir, sürücü seç, "Test et" butonu.
-- **Çıktı:** panelden Cloudflare'e bağlanılıyor, zone sayısı görülüyor.
+  mailer, `config/filesystems.php` `s3` diski.
+- Migration + Model: `cloudflare_accounts` (tenant, encrypted token) +
+  `cloudflare_account_user` pivot.
+- **Filament tenancy'yi etkinleştir:** `AdminPanelProvider`'da tenant + tenant menü;
+  `User` modeline `HasTenants`; tenant registration (hesap ID + token → doğrula).
+- `CloudflareClient` servisi (Saloon), aktif tenant'ın token'ıyla çalışır;
+  `GET /zones` "bağlantı testi".
+- Filament **SettingsPage**: gönderim sürücüsü seç, token güncelle, "Test et".
+- **Çıktı:** kullanıcı bir Cloudflare hesabı (tenant) ekliyor, panelden bağlanıp
+  zone sayısını görüyor; tenant switcher çalışıyor.
 
 ### Faz 1 — Domain & adres/kural okuma (read-only senkron)
 - Migration+Model: `domains`, `destination_addresses`, `routing_rules`.
@@ -428,9 +517,10 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
 
 ### Faz 4 — Gelen kutusu (tam mail servisi)
 - **Email Worker** (`workers/inbound-email/`): postal-mime parse + HMAC webhook +
-  (ops.) R2 ek yükleme + `wrangler.toml`.
-- Laravel webhook route + HMAC middleware + `StoreIncomingEmail` job.
-- Migration+Model: `emails` (+ full-text), thread bağlama.
+  ek dosyaları S3/R2'ye yükleme + `wrangler.toml`.
+- Laravel webhook route + HMAC middleware + `StoreIncomingEmail` job (gelen maili
+  doğru tenant'a `cloudflare_account_id` ile bağlar).
+- Migration+Model: `emails` (portatif arama), thread bağlama.
 - Filament **InboxResource**: liste/filtre/arama, güvenli HTML görüntüleme, ek indirme,
   okundu/yıldız, **Yanıtla/İlet** (Faz 2 giden akışına bağlanır).
 - **Çıktı:** gelen mailler arayüzde görüntüleniyor, yanıtlanıyor — tam mail servisi.
@@ -445,13 +535,20 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
 
 ---
 
-## 13. Açık kararlar
+## 13. Kararlar (netleşti)
 
-- **Ek depolama:** R2 (S3 uyumlu, önerilen) vs yerel `storage` diski? Büyük ekler
-  için R2 daha iyi.
-- **Çok hesap / çok kullanıcı:** Tek Cloudflare hesabı + tek admin mi, yoksa
-  çok hesap + rol tabanlı erişim mi?
-- **Reply stratejisi:** Send API ile yanıt (önerilen) — Worker `reply()` DMARC
-  kısıtları nedeniyle kullanılmayacak; onay.
-- **Prod veritabanı:** SQLite (dev) → MySQL/Postgres (prod) geçişi ne zaman?
-- **Spam/filtre:** gelen mailde spam skoru/filtre istenir mi (Worker tarafında)?
+- ✅ **Ek depolama:** Config'den ayarlanabilir, **S3 uyumlu** (AWS S3 / Cloudflare R2
+  / MinIO) — `attachments_disk` = `s3` (varsayılan) veya `local`. Ekler `private`,
+  imzalı URL ile indirilir.
+- ✅ **Mimari:** **Multi-tenant** — her Cloudflare hesabı bir **tenant** (Filament
+  tenancy). Cloudflare'in account-scoped modeliyle birebir. Kullanıcılar hesaplara
+  pivot ile üye; tüm veriler tenant'a scope'lu.
+- ✅ **Veritabanı:** Geliştirmede **SQLite**, üretimde **MySQL**. Migration'lar iki
+  sürücüde de çalışacak biçimde portatif (bkz. §11).
+- ✅ **Reply stratejisi:** **Send API ile** yanıt; Worker `reply()` (DMARC/tek-yanıt
+  kısıtları) kullanılmayacak.
+- ✅ **Spam/filtre:** Şimdilik **kapsam dışı** (ileride Worker tarafında eklenebilir).
+
+### Sonraki adım
+Faz 0'dan (config + Filament tenancy + `CloudflareAccount` modeli + bağlantı testi)
+koda başlamaya hazır.
