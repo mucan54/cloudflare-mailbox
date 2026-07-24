@@ -545,6 +545,44 @@ başkaları Coolify'da deploy edince her kurulum kendi client'ını kaydetmek zo
 kalır. Ayrıca email routing/sending scope'larının OAuth ile verilebilirliği doküman
 tarafında net değil. Bu yüzden OAuth **opsiyonel/ileri faz** (§13).
 
+### 8.2.2 Ayar sayfası durum akışı (onboarding state machine)
+
+Tenant ayar sayfası, kullanıcıyı adım adım yürüten bir **durum makinesidir**. Her
+adım tamamlanınca bir sonraki aksiyon aktifleşir:
+
+| Durum | Koşul | Aktif aksiyon(lar) | O anda yapılabilenler |
+|-------|-------|--------------------|------------------------|
+| **0 · Boş** | Token yok | **Bağlan** (token yapıştır/validate) | — |
+| **1 · Bağlı** | Token validate + hesap tespit edildi | **Full Sync** | (henüz veri yok) |
+| **2 · Senkron** | Domain/kural/adres DB'ye çekildi | **Deploy Worker** aktifleşir | Domain/adres/kural görüntüle, **mail gönder** (Faz 2) |
+| **3 · Worker aktif** | `cf:deploy-worker` başarılı | (Yeniden deploy / drift rozeti) | **Gelen kutusu** çalışır (Faz 4) |
+
+**Kilit noktalar:**
+
+- **"Yapıştır → Validate → Full Sync → kullan":** 2. durumda kullanıcı domainlerini
+  görür ve **mail göndermeye başlayabilir** (send API için token + doğrulanmış domain
+  yeter).
+- **"Deploy Worker" butonu, Full Sync'ten sonra aktifleşir** — kasıtlı gate. Koşullar:
+  (a) token bağlı, (b) **en az bir domain sync'li** (worker, o domaindeki bir adrese
+  "Send to Worker" kuralı bağlar; hedefi bilmek için sync şart), (c) `APP_URL` set.
+- Buton pasifken **neden pasif olduğu** tooltip'te yazar (ör. "Önce Full Sync yapın").
+- **Gelen kutusu (inbox)** yalnız 3. durumdan sonra (worker deploy + routing kuralı)
+  gerçekten dolar.
+
+**Full Sync** = `SyncDomains` + `SyncRoutingRules` + `SyncDestinationAddresses`
+job'ları sırayla; ilerleme Filament notification/progress ile gösterilir; tekrar
+çalıştırılabilir (idempotent upsert).
+
+### 8.2.3 Ayarların saklanması (paket kararı)
+
+- **Per-tenant ayarlar** (token, account_id, webhook_secret, gönderim sürücüsü) →
+  **`CloudflareAccount` modeli** + Filament'in modele bağlı ayar sayfası. Tenancy ile
+  doğal uyum; **ekstra paket yok**.
+- `filament-spatie-settings` (spatie/laravel-settings) **kullanılmaz**: global-singleton
+  ayarlar için tasarlıdır, **per-tenant** kimlik bilgilerimize uymaz + Filament v5
+  uyumu ayrıca doğrulanmalı. Gelecekte gerçekten global birkaç ayar çıkarsa yeniden
+  değerlendirilebilir; şimdilik gereksiz bağımlılık.
+
 ### 8.3 Admin panel kaynakları & sayfaları
 
 `app/Filament/Resources/` ve `Pages/`, `Widgets/`:
@@ -696,8 +734,11 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
 - `SyncDomains`, `SyncRoutingRules`, `SyncDestinationAddresses` job'ları.
 - Filament **DomainResource**, **DestinationAddressResource**, **RoutingRuleResource**
   (listeleme + "Senkronize et").
-- **Çıktı:** mevcut domainler, hedef adresler ve mevcut mail adresleri (kurallar)
-  arayüzde listeleniyor.
+- Ayar sayfasında **Full Sync** aksiyonu (state machine §8.2.2): üç sync job'ını
+  sırayla çalıştırır, ilerleme gösterir; tamamlanınca "Deploy Worker" gate koşulu
+  sağlanır.
+- **Çıktı:** validate → Full Sync sonrası domainler, hedef adresler ve mevcut mail
+  adresleri (kurallar) arayüzde listeleniyor; kullanıcı mail göndermeye hazır.
 
 ### Faz 2 — Giden mail (API + SMTP)
 - `MailSender` arayüzü + `ApiMailSender` (send API) + `SmtpMailSender`.
@@ -719,8 +760,8 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
   `X-CF-Account`) + `wrangler.toml.stub` + `package.json`.
 - **`php artisan cf:deploy-worker`** komutu: şablonu Laravel config/DB'den render
   eder, `wrangler deploy` + `secret put` çalıştırır; admin panelinde "Worker'ı
-  deploy et" aksiyonu. `cloudflare_accounts`'a `webhook_secret` + `worker_deployed_at`
-  + `worker_config_hash`.
+  deploy et" aksiyonu — **Full Sync tamamlanınca aktifleşir** (gate koşulları §8.2.2).
+  `cloudflare_accounts`'a `webhook_secret` + `worker_deployed_at` + `worker_config_hash`.
 - **Drift/redeploy:** `cf:worker:sync` (kaymışları redeploy) + `cf:worker:status`;
   `CloudflareAccount` observer → `DeployWorkerJob`; tenant satırında güncel/kaymış
   rozeti (bkz. §5.1.2).
@@ -783,6 +824,11 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
   **scoped API token**; token template deep-link (izinler önceden seçili) +
   `GET /accounts` ile otomatik hesap tespiti. En kolay ve self-host'a uygun.
   OAuth ileride opsiyonel. Bkz. §8.2.1.
+- ✅ **Onboarding akışı:** Ayar sayfası bir **durum makinesi** — Bağlan → Full Sync →
+  Deploy Worker. "Deploy Worker" butonu Full Sync sonrası aktifleşir (§8.2.2).
+- ✅ **Ayar saklama:** Per-tenant ayarlar `CloudflareAccount` modelinde (ekstra paket
+  yok). `filament-spatie-settings` **kullanılmaz** (global-singleton; per-tenant'a
+  uymaz + Filament v5 uyumu belirsiz). Bkz. §8.2.3.
 
 ### Sonraki adım
 Faz 0'dan (config + Filament tenancy + `CloudflareAccount` modeli + bağlantı testi)
