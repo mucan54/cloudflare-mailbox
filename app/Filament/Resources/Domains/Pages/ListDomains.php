@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Domains\Pages;
 
 use App\Filament\Resources\Domains\DomainResource;
+use App\Filament\Support\DeployWorkerAction;
 use App\Filament\Support\FullSyncAction;
 use Filament\Resources\Pages\ListRecords;
 
@@ -14,6 +15,7 @@ class ListDomains extends ListRecords
     {
         return [
             FullSyncAction::make(),
+            DeployWorkerAction::make(),
         ];
     }
 }

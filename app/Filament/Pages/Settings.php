@@ -75,8 +75,9 @@ class Settings extends Page
                         .'yapıştırın; boş bırakırsanız mevcut token korunur.<br>'
                         .'<a href="'.e(RegisterCloudflareAccount::tokenTemplateUrl()).'" target="_blank" '
                         .'class="fi-link" style="text-decoration:underline">Cloudflare’de yeni token oluştur</a> '
-                        .'— gereken izinler: Account · Email Routing Addresses · Edit · | Zone · Email Routing '
-                        .'Rules · Edit · | Account · Email Sending · Edit · | Zone · Zone · Read.'
+                        .'— gereken izinler: Account · <b>Email Routing Addresses</b> · Edit | Zone · '
+                        .'<b>Email Routing Rules</b> · Edit | Account · <b>Email Sending</b> · Edit | '
+                        .'Account · <b>Workers Scripts</b> · Edit | Zone · <b>Zone</b> · Read.'
                     )),
 
                 Select::make('sending_driver')

@@ -45,7 +45,7 @@ class SetupChecklist extends Widget
             [
                 'label' => $drifted ? __('Redeploy the inbound Worker (drifted)') : __('Deploy the inbound Worker'),
                 'done' => $account->isWorkerDeployed() && ! $drifted,
-                'hint' => __('Set a domain to catch-all → Worker and deploy it.'),
+                'hint' => __('Click “Deploy Worker”, then set a domain to catch-all → Worker.'),
                 'url' => $this->safeUrl(DomainResource::class),
             ],
             [

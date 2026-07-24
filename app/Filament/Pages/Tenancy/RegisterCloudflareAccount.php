@@ -36,15 +36,15 @@ class RegisterCloudflareAccount extends RegisterTenant
                 ->required()
                 ->helperText(new HtmlString(
                     '<a href="'.e(static::tokenTemplateUrl()).'" target="_blank" class="fi-link" '
-                    .'style="text-decoration:underline">Cloudflare token oluşturma sayfasını aç</a> '
-                    .'ve “Create Custom Token” ile şu izinleri ekleyin:'
+                    .'style="text-decoration:underline">Cloudflare token oluşturma sayfasını aç</a>. '
+                    .'Link <b>Email Sending</b> ve <b>Zone Read</b>’i otomatik doldurur; '
+                    .'aşağıdaki üçünü <b>“+ Add more” ile elle ekleyin</b>:'
                     .'<ul style="margin:.4rem 0 .2rem 1rem;list-style:disc">'
                     .'<li>Account · <b>Email Routing Addresses</b> · Edit</li>'
                     .'<li>Zone · <b>Email Routing Rules</b> · Edit</li>'
-                    .'<li>Account · <b>Email Sending</b> · Edit</li>'
-                    .'<li>Zone · <b>Zone</b> · Read</li>'
+                    .'<li>Account · <b>Workers Scripts</b> · Edit <span style="opacity:.7">(gelen Worker’ı deploy için)</span></li>'
                     .'</ul>'
-                    .'Account Resources = tüm hesaplar, Zone Resources = tüm zone’lar. '
+                    .'Account Resources = All accounts, Zone Resources = All zones. '
                     .'“Create Token” deyip token’ı buraya yapıştırın.'
                 )),
 
