@@ -21,11 +21,10 @@ const router = createRouter({
 
 router.beforeEach((to) => {
     const auth = useAuth();
+    // /login doubles as "add another account", so an authenticated user must be
+    // able to reach it — only guard the truly private routes.
     if (!to.meta.guest && !auth.isAuthenticated) {
         return '/login';
-    }
-    if (to.meta.guest && auth.isAuthenticated) {
-        return '/f/inbox';
     }
 });
 

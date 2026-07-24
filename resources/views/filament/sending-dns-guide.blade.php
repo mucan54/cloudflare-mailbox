@@ -7,8 +7,15 @@
     </p>
 
     @if ($error)
-        <div class="rounded-lg bg-danger-50 dark:bg-danger-500/10 p-3 text-danger-700 dark:text-danger-400">
-            Kayıtlar Cloudflare’den alınamadı: {{ $error }}
+        <div class="rounded-lg bg-danger-50 dark:bg-danger-500/10 p-3 text-danger-700 dark:text-danger-400 space-y-1">
+            <div>Kayıtlar Cloudflare’den alınamadı: {{ $error }}</div>
+            @if ($auth_error)
+                <div class="text-xs">
+                    Bu bir <b>izin eksikliği</b>: token’ınızda <b>Zone · Email Routing Rules · Read/Edit</b> yok.
+                    Ayarlar → “Cloudflare’de yeni token oluştur” ile bu izni ekleyin. Aşağıdaki önerilen
+                    değerleri yine de elle ekleyebilirsiniz.
+                </div>
+            @endif
         </div>
     @endif
 
@@ -37,8 +44,22 @@
         </div>
     @elseif (! $error)
         <div class="rounded-lg bg-warning-50 dark:bg-warning-500/10 p-3 text-warning-700 dark:text-warning-400">
-            Cloudflare bu bölge için otomatik e-posta kaydı döndürmedi. SPF/DKIM değerlerini
-            Cloudflare panelinde <b>Email → Email Sending</b> kurulumundan kopyalayın.
+            Cloudflare bu bölge için otomatik e-posta kaydı döndürmedi. Aşağıdaki önerilen SPF/DMARC’ı
+            ekleyin; <b>DKIM</b> değerini Cloudflare panelinde <b>Email → Email Sending</b> kurulumundan kopyalayın.
+        </div>
+    @endif
+
+    @if ($spf)
+        <div class="rounded-lg border border-primary-200 dark:border-primary-500/30 bg-primary-50 dark:bg-primary-500/10 p-3 space-y-1">
+            <div class="font-semibold text-primary-800 dark:text-primary-300">Önerilen SPF (eksik — ekleyin)</div>
+            <div class="font-mono text-xs break-all">
+                <span class="text-gray-500">{{ $spf['type'] }}</span>
+                &nbsp;{{ $spf['name'] }}&nbsp;→&nbsp;{{ $spf['value'] }}
+            </div>
+            <div class="text-xs text-gray-500 dark:text-gray-400">
+                Bölgede zaten bir SPF (TXT) kaydı varsa yenisini eklemeyin; mevcut kayda
+                <span class="font-mono">include:_spf.mx.cloudflare.net</span> ekleyin (alan başına tek SPF).
+            </div>
         </div>
     @endif
 

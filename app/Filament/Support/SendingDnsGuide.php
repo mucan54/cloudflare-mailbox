@@ -43,10 +43,25 @@ class SendingDnsGuide
         $hasDmarc = collect($normalized)
             ->contains(fn ($r) => str_contains(strtolower($r['name']), '_dmarc'));
 
+        $hasSpf = collect($normalized)
+            ->contains(fn ($r) => $r['type'] === 'TXT' && str_contains(strtolower($r['value']), 'v=spf1'));
+
+        // Whether the failure looks like a missing token permission (so the UI
+        // can point the user at the exact fix rather than a generic error).
+        $isAuthError = $error !== null && str_contains(strtolower($error), 'authentication');
+
         return [
             'domain' => $domain->name,
             'error' => $error,
+            'auth_error' => $isAuthError,
             'records' => $normalized,
+            // Documented, stable Cloudflare email SPF include — offered when the
+            // API returned no SPF record (or could not be reached).
+            'spf' => $hasSpf ? null : [
+                'type' => 'TXT',
+                'name' => $domain->name,
+                'value' => 'v=spf1 include:_spf.mx.cloudflare.net ~all',
+            ],
             'dmarc' => $hasDmarc ? null : [
                 'type' => 'TXT',
                 'name' => '_dmarc.'.$domain->name,
