@@ -23,7 +23,7 @@ class CreateAdminCommand extends Command
     public function handle(): int
     {
         $email = $this->argument('email') ?: $this->ask('Admin e-posta');
-        $name = $this->option('name') ?: ($this->ask('İsim', 'Admin'));
+        $name = $this->option('name') ?: 'Admin';
         $password = $this->option('password') ?: $this->secret('Şifre (min 8 karakter)');
 
         $validator = Validator::make(
