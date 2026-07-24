@@ -49,6 +49,19 @@ return [
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
 
+        // Cloudflare Email Service — SMTP transport. Auth uses the literal
+        // username "api_token" and the Cloudflare API token as the password.
+        // The token is supplied per-tenant at runtime by SmtpMailSender.
+        'cloudflare' => [
+            'transport' => 'smtp',
+            'host' => env('CLOUDFLARE_SMTP_HOST', 'smtp.mx.cloudflare.net'),
+            'port' => (int) env('CLOUDFLARE_SMTP_PORT', 465),
+            'encryption' => env('CLOUDFLARE_SMTP_ENCRYPTION', 'tls'),
+            'username' => 'api_token',
+            'password' => env('CLOUDFLARE_API_TOKEN'),
+            'timeout' => null,
+        ],
+
         'ses' => [
             'transport' => 'ses',
         ],

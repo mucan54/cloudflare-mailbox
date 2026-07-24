@@ -1,0 +1,109 @@
+<?php
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Cloudflare API
+    |--------------------------------------------------------------------------
+    |
+    | Base URL for the Cloudflare v4 REST API. Per-tenant credentials
+    | (account id + API token) live in the `cloudflare_accounts` table; the
+    | env values below are only fallbacks for the very first setup / tinkering.
+    |
+    */
+
+    'api_base' => env('CLOUDFLARE_API_BASE', 'https://api.cloudflare.com/client/v4'),
+
+    'account_id' => env('CLOUDFLARE_ACCOUNT_ID'),
+    'api_token' => env('CLOUDFLARE_API_TOKEN'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Outbound sending
+    |--------------------------------------------------------------------------
+    |
+    | 'api'  -> POST /accounts/{id}/email/sending/send (default, synchronous
+    |           delivered/queued/bounced result)
+    | 'smtp' -> Laravel `cloudflare` mailer (config/mail.php)
+    |
+    */
+
+    'sending' => [
+        'driver' => env('CLOUDFLARE_SEND_DRIVER', 'api'),
+        'max_bytes' => 5 * 1024 * 1024, // 5 MiB hard limit (incl. attachments)
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Onboarding — API token template deep link
+    |--------------------------------------------------------------------------
+    |
+    | Permission-group keys used to pre-fill the Cloudflare "Create Token" page
+    | so onboarding is one click. The email* keys are pinned from
+    | GET /user/tokens/permission_groups during setup (see docs/ARCHITECTURE.md
+    | §8.2.1); adjust here if Cloudflare renames them.
+    |
+    */
+
+    'token_template' => [
+        'name' => 'Cloudflare Mailbox',
+        'dashboard_url' => 'https://dash.cloudflare.com/profile/api-tokens',
+        'permission_groups' => [
+            ['key' => 'email_routing', 'type' => 'edit'],
+            ['key' => 'email_sending', 'type' => 'edit'],
+            ['key' => 'zone', 'type' => 'read'],
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Inbound webhook (Cloudflare Email Worker -> Laravel)
+    |--------------------------------------------------------------------------
+    |
+    | Per-tenant `webhook_secret` (encrypted) is the source of truth; the env
+    | value is a fallback. The signature is HMAC(secret, timestamp + "." + body)
+    | and requests must arrive within `tolerance_secs`.
+    |
+    */
+
+    'webhook' => [
+        'secret' => env('CLOUDFLARE_WEBHOOK_SECRET'),
+        'tolerance_secs' => (int) env('CLOUDFLARE_WEBHOOK_TOLERANCE', 300),
+        // Attachments at or below this size travel inline (base64) in the
+        // webhook body; larger ones are expected as an R2 key reference.
+        'inline_attachment_max_bytes' => (int) env('CLOUDFLARE_INLINE_ATTACHMENT_MAX', 2 * 1024 * 1024),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Attachments storage
+    |--------------------------------------------------------------------------
+    |
+    | Any Laravel filesystem disk name. `s3` works for AWS S3, Cloudflare R2
+    | and MinIO (only the endpoint/region differ). Files are stored private
+    | and served via temporary signed URLs.
+    |
+    */
+
+    'attachments_disk' => env('CLOUDFLARE_ATTACHMENTS_DISK', 's3'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Worker deploy
+    |--------------------------------------------------------------------------
+    |
+    | The inbound Email Worker lives in cf/ and is deployed from Laravel via
+    | `php artisan cf:deploy-worker`. These control naming and the wrangler
+    | binary used by the deploy command.
+    |
+    */
+
+    'worker' => [
+        'name_prefix' => env('CLOUDFLARE_WORKER_PREFIX', 'mailbox-inbound'),
+        'directory' => base_path('cf'),
+        'wrangler_bin' => env('CLOUDFLARE_WRANGLER_BIN', 'npx wrangler'),
+        'fallback_forward_to' => env('CLOUDFLARE_FALLBACK_FORWARD_TO'),
+    ],
+
+];

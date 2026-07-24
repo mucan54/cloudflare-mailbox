@@ -2,6 +2,8 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\Tenancy\RegisterCloudflareAccount;
+use App\Models\CloudflareAccount;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -28,6 +30,9 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->tenant(CloudflareAccount::class, slugAttribute: 'slug')
+            ->tenantRegistration(RegisterCloudflareAccount::class)
+            ->tenantMenu()
             ->colors([
                 'primary' => Color::Amber,
             ])
