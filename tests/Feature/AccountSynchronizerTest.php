@@ -49,9 +49,10 @@ class AccountSynchronizerTest extends TestCase
             'name' => 'Acme', 'account_id' => 'acc1', 'api_token' => 'tok',
         ]);
 
-        $counts = (new AccountSynchronizer($account))->full();
+        $result = (new AccountSynchronizer($account))->full();
 
-        $this->assertSame(['domains' => 1, 'addresses' => 1, 'rules' => 1], $counts);
+        $this->assertSame(['domains' => 1, 'addresses' => 1, 'rules' => 1], $result['counts']);
+        $this->assertEmpty($result['errors']);
         $this->assertDatabaseHas('domains', ['zone_id' => 'z1', 'name' => 'a.com', 'routing_enabled' => true]);
         $this->assertDatabaseHas('destination_addresses', ['email' => 'me@gmail.com']);
         $this->assertDatabaseHas('routing_rules', ['cf_id' => 'rule1', 'matcher' => 'support@a.com']);
@@ -62,6 +63,33 @@ class AccountSynchronizerTest extends TestCase
         $this->assertSame(1, $account->domains()->count());
         $this->assertSame(1, $account->destinationAddresses()->count());
         $this->assertSame(1, $account->routingRules()->count());
+    }
+
+    public function test_full_sync_is_resilient_to_missing_permission(): void
+    {
+        // Zones/routing OK, but the addresses endpoint returns an auth error
+        // (token lacks Email Routing permission).
+        Http::fake([
+            '*/email/routing/addresses*' => Http::response([
+                'success' => false,
+                'errors' => [['code' => 10000, 'message' => 'Authentication error']],
+                'result' => null,
+            ], 403),
+            '*/zones/z1/email/routing/rules*' => Http::response($this->ok([])),
+            '*/zones/z1/email/routing*' => Http::response($this->ok(['enabled' => true])),
+            '*/zones*' => Http::response($this->ok(
+                [['id' => 'z1', 'name' => 'a.com', 'status' => 'active']],
+                ['result_info' => ['page' => 1, 'total_pages' => 1]],
+            )),
+        ]);
+
+        $account = CloudflareAccount::create(['name' => 'Acme', 'account_id' => 'acc1', 'api_token' => 'tok']);
+
+        $result = (new AccountSynchronizer($account))->full();
+
+        $this->assertSame(1, $result['counts']['domains']);            // domains still synced
+        $this->assertArrayHasKey('addresses', $result['errors']);      // addresses reported failed
+        $this->assertDatabaseHas('domains', ['zone_id' => 'z1']);
     }
 
     public function test_destination_address_verified_flag(): void

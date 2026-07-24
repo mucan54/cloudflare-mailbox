@@ -19,21 +19,33 @@ class AccountSynchronizer
     }
 
     /**
-     * Run all sync steps. Returns per-step counts.
+     * Run all sync steps, resiliently: a missing permission on one step (e.g.
+     * Email Routing) does not abort the others. Returns counts + per-step errors.
      *
-     * @return array{domains:int, addresses:int, rules:int}
+     * @return array{counts: array{domains:int, addresses:int, rules:int}, errors: array<string, string>}
      */
     public function full(): array
     {
-        $counts = [
-            'domains' => $this->syncDomains(),
-            'addresses' => $this->syncDestinationAddresses(),
-            'rules' => $this->syncRoutingRules(),
+        $counts = ['domains' => 0, 'addresses' => 0, 'rules' => 0];
+        $errors = [];
+
+        $steps = [
+            'domains' => fn () => $this->syncDomains(),
+            'addresses' => fn () => $this->syncDestinationAddresses(),
+            'rules' => fn () => $this->syncRoutingRules(),
         ];
+
+        foreach ($steps as $key => $step) {
+            try {
+                $counts[$key] = $step();
+            } catch (CloudflareException $e) {
+                $errors[$key] = $e->getMessage();
+            }
+        }
 
         $this->account->forceFill(['last_synced_at' => now()])->save();
 
-        return $counts;
+        return ['counts' => $counts, 'errors' => $errors];
     }
 
     public function syncDomains(): int

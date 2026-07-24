@@ -35,10 +35,17 @@ class RegisterCloudflareAccount extends RegisterTenant
                 ->revealable()
                 ->required()
                 ->helperText(new HtmlString(
-                    'Gereken izinler önceden seçili olarak '
-                    .'<a href="'.e(static::tokenTemplateUrl()).'" target="_blank" class="fi-link" '
-                    .'style="text-decoration:underline">Cloudflare token oluşturma sayfasını aç</a>, '
-                    .'"Create Token" deyip token’ı buraya yapıştırın.'
+                    '<a href="'.e(static::tokenTemplateUrl()).'" target="_blank" class="fi-link" '
+                    .'style="text-decoration:underline">Cloudflare token oluşturma sayfasını aç</a> '
+                    .'ve “Create Custom Token” ile şu izinleri ekleyin:'
+                    .'<ul style="margin:.4rem 0 .2rem 1rem;list-style:disc">'
+                    .'<li>Account · <b>Email Routing Addresses</b> · Edit</li>'
+                    .'<li>Zone · <b>Email Routing Rules</b> · Edit</li>'
+                    .'<li>Account · <b>Email Sending</b> · Edit</li>'
+                    .'<li>Zone · <b>Zone</b> · Read</li>'
+                    .'</ul>'
+                    .'Account Resources = tüm hesaplar, Zone Resources = tüm zone’lar. '
+                    .'“Create Token” deyip token’ı buraya yapıştırın.'
                 )),
 
             TextInput::make('account_id')
@@ -76,11 +83,30 @@ class RegisterCloudflareAccount extends RegisterTenant
                 throw new Halt;
             }
 
-            if (count($accounts) === 0) {
+            if (count($accounts) === 1) {
+                $accountId = $accounts[0]['id'];
+            } elseif (count($accounts) > 1) {
+                $ids = collect($accounts)->map(fn ($a) => ($a['name'] ?? '').' ('.$a['id'].')')->implode(', ');
+                Notification::make()
+                    ->title('Birden fazla hesap bulundu')
+                    ->body('Lütfen Account ID alanını doldurun: '.$ids)
+                    ->warning()
+                    ->send();
+                throw new Halt;
+            } else {
+                // No account-list permission — derive the account id from the first
+                // zone (the token has Zone:Read).
+                try {
+                    $accountId = $client->listZones()[0]['account']['id'] ?? null;
+                } catch (CloudflareException) {
+                    $accountId = null;
+                }
+            }
+
+            if (! $accountId) {
                 Notification::make()
                     ->title('Hesap otomatik bulunamadı')
-                    ->body('Token’ınız hesapları listeleme iznine sahip olmayabilir. '
-                        .'“Account ID” alanını elle doldurun — Cloudflare panelinde Overview '
+                    ->body('“Account ID” alanını elle doldurun — Cloudflare panelinde Overview '
                         .'sayfasının sağ alt köşesinde ya da dashboard URL’inizde bulabilirsiniz.')
                     ->warning()
                     ->persistent()
@@ -88,19 +114,6 @@ class RegisterCloudflareAccount extends RegisterTenant
 
                 throw new Halt;
             }
-
-            if (count($accounts) > 1) {
-                $ids = collect($accounts)->map(fn ($a) => ($a['name'] ?? '').' ('.$a['id'].')')->implode(', ');
-                Notification::make()
-                    ->title('Birden fazla hesap bulundu')
-                    ->body('Lütfen Account ID alanını doldurun: '.$ids)
-                    ->warning()
-                    ->send();
-
-                throw new Halt;
-            }
-
-            $accountId = $accounts[0]['id'];
         }
 
         // 3) Tenant kaydı
