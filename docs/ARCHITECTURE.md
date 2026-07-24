@@ -85,7 +85,7 @@ Yöneticiler `/admin` tenancy'li panele girer. Ayrıntı: [§8.1](#81-paneller--
                           │                                             ▼
               ┌───────────┴─────────────┐                 ┌──────────────────────────┐
               │  Cloudflare Email Worker │                 │  Cloudflare REST API       │
-              │  workers/inbound-email/  │                 │  api.cloudflare.com/client │
+              │  cf/  (Laravel'den deploy)│                 │  api.cloudflare.com/client │
               │  email() { postal-mime } │◄── MX ── mail   │  /v4/accounts|zones/...     │
               └──────────────────────────┘   gelen         └──────────────────────────┘
 ```
@@ -187,11 +187,24 @@ Uygulama içinde tek bir `MailSender` arayüzü; iki implementasyon
 
 Cloudflare inbox tutmadığından, tam posta kutusu deneyimi şu zincirle kurulur:
 
-### 5.1 Email Worker (`workers/inbound-email/`)
+### 5.1 Email Worker (`cf/` klasörü)
 
-Ayrı bir mini-proje (wrangler ile deploy). `email()` handler'ı:
+Worker kaynağı ve deploy araçları repoda **`cf/`** klasöründe tutulur (küçük bir
+Wrangler projesi). Yapı:
 
-```ts
+```
+cf/
+├── package.json          # wrangler, postal-mime, mimetext
+├── wrangler.toml.stub    # şablon — {{PLACEHOLDER}}'lar Laravel'den doldurulur
+├── src/
+│   └── inbound-email.js  # email() handler
+├── .gitignore            # üretilen wrangler.toml, .dev.vars, node_modules
+└── README.md             # manuel deploy notları
+```
+
+`src/inbound-email.js` — `email()` handler'ı (özet):
+
+```js
 import PostalMime from "postal-mime";
 
 export default {
@@ -201,50 +214,85 @@ export default {
       message_id: message.headers.get("Message-ID"),
       envelope_from: message.from,
       envelope_to: message.to,
-      subject: parsed.subject,
-      html: parsed.html,
-      text: parsed.text,
-      from: parsed.from,
-      to: parsed.to,
-      cc: parsed.cc,
-      date: parsed.date,
+      subject: parsed.subject, html: parsed.html, text: parsed.text,
+      from: parsed.from, to: parsed.to, cc: parsed.cc, date: parsed.date,
       headers: [...message.headers],
       attachments: parsed.attachments.map(a => ({
-        filename: a.filename, mimeType: a.mimeType,
-        contentId: a.contentId, size: a.content.byteLength,
-        // içerik: R2'ye koy, key gönder (veya küçükse base64)
+        filename: a.filename, mimeType: a.mimeType, contentId: a.contentId,
+        size: a.content.byteLength,
+        content: btoa(String.fromCharCode(...new Uint8Array(a.content))), // base64
       })),
       raw_size: message.rawSize,
     };
 
-    // HMAC imzalı POST
     const body = JSON.stringify(payload);
-    const sig = await hmacSha256(env.WEBHOOK_SECRET, body);
+    const sig = await hmacSha256(env.WEBHOOK_SECRET, body);   // HMAC imza
     await fetch(env.WEBHOOK_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json",
-                 "X-CF-Signature": sig, "X-CF-Timestamp": `${Date.now()}` },
+      headers: {
+        "Content-Type": "application/json",
+        "X-CF-Account": env.ACCOUNT_ID,          // imzasız; Laravel hesabı bununla bulur
+        "X-CF-Signature": sig,
+        "X-CF-Timestamp": `${Date.now()}`,
+      },
       body,
     });
-
-    // opsiyonel: klasik forward'ı da sürdür
-    // await message.forward(env.FORWARD_TO);
+    // opsiyonel: klasik forward da sürsün → await message.forward(env.FORWARD_TO);
   },
 };
 ```
 
 `ForwardableEmailMessage` arayüzü: `from`, `to`, `headers`, `raw` (stream),
 `rawSize`, `canBeForwarded`, `setReject(reason)`, `forward(rcptTo, headers?)`,
-`reply(EmailMessage)`. Reply/compose için `mimetext` + `nodejs_compat` flag'i
-gerekir. Ekler için **R2** önerilir (büyük ekler webhook gövdesini şişirmesin;
-Worker eki R2'ye koyar, Laravel key ile indirir/gösterir).
+`reply(EmailMessage)`. Reply/compose için `mimetext` + `nodejs_compat` flag'i.
+
+**Ekler:** varsayılan olarak base64 ile webhook gövdesinde gönderilir; Laravel bunu
+`attachments_disk` (S3/R2/local) diskine yazar. Çok büyük ekler için opsiyonel:
+Worker'a bir **R2 bucket binding**'i eklenip ek doğrudan R2'ye PUT edilir, webhook'a
+yalnız key gönderilir (`wrangler.toml.stub`'da yorumlu örnek).
+
+### 5.1.1 Laravel-güdümlü konfigürasyon & deploy
+
+Worker ayarları **elle yazılmaz**; Laravel config/env tek kaynaktır. Bir Artisan
+komutu şablonu doldurup deploy eder:
+
+```
+php artisan cf:deploy-worker {tenant?}      # tenant = cloudflare hesabı (slug/id)
+```
+
+Komut adımları:
+
+1. Tenant'ı çözer → `account_id`, `api_token` (şifreli, çözülür), `webhook_secret`.
+2. `cf/wrangler.toml.stub`'u render eder:
+   - `name = "mailbox-inbound-{tenant-slug}"`
+   - `account_id = {account_id}`
+   - `[vars] WEBHOOK_URL = "{APP_URL}/api/cf/incoming"`, `ACCOUNT_ID = {account_id}`,
+     (ops.) `FORWARD_TO`
+   - `compatibility_flags = ["nodejs_compat"]`
+   - → `cf/wrangler.toml` (gitignore'lu, üretilen dosya)
+3. Wrangler'ı çalıştırır (Laravel `Process` ile), auth için env geçirir:
+   `CLOUDFLARE_API_TOKEN={api_token}` → `npx wrangler deploy`
+4. Secret'ı güvenli aktarır: `wrangler secret put WEBHOOK_SECRET` (değer stdin'den).
+5. (Ops.) İlgili adres(ler) için **"Send to Worker" routing kuralını** API ile
+   oluşturur/günceller.
+
+Böylece `.env`/DB'deki `APP_URL`, secret veya hesap değişince tek komutla Worker
+yeniden konfigüre edilir; kayma olmaz. Admin panelinde **"Worker'ı deploy et"**
+aksiyonu bu komutu tetikler ve çıktısını gösterir.
+
+**Gerekli env/ayarlar:** `APP_URL` (webhook tabanı), tenant başına `account_id` +
+`api_token` + `webhook_secret` (DB'de, şifreli), sunucuda `node`/`npx wrangler`
+kurulu olmalı.
 
 ### 5.2 Laravel webhook
 
 - Route: `POST /api/cf/incoming` (Filament auth dışı, kendi HMAC doğrulaması).
-- Middleware: `X-CF-Signature` HMAC + `X-CF-Timestamp` replay penceresi (±5 dk).
+- Middleware: `X-CF-Account` ile tenant/hesap bulunur → o hesabın `webhook_secret`'ı
+  ile `X-CF-Signature` HMAC doğrulanır + `X-CF-Timestamp` replay penceresi (±5 dk).
+  (Hesap-başı secret → hesap izolasyonu.)
 - Controller ince tutulur → `StoreIncomingEmail` job'a devreder (kuyruk) → `emails`
-  + `attachments` tablolarına yazar, thread'e bağlar (In-Reply-To/References).
+  + `attachments` tablolarına yazar, `to_email → mailbox_id` çözer, thread'e bağlar
+  (In-Reply-To/References). Base64 ekler `attachments_disk`'e yazılır.
 
 ### 5.3 Yanıtlama (reply) iki yol
 
@@ -267,8 +315,11 @@ sürücüde de çalışacak şekilde portatif yazılır (bkz. [§11](#11-test--c
 > için `cloudflare_account_id` **doğrudan da** tutulur (domain üzerinden JOIN'e
 > gerek kalmadan tenant filtresi).
 
-- **cloudflare_accounts** *(tenant)* — `id, name (slug/label), account_id,
-  api_token (encrypted), sending_driver (api|smtp), timestamps`
+- **cloudflare_accounts** *(tenant)* — `id, name, slug, account_id,
+  api_token (encrypted), webhook_secret (encrypted), sending_driver (api|smtp),
+  worker_deployed_at, timestamps`
+  - `webhook_secret`: hesap-başı; Worker deploy'unda secret olarak aktarılır,
+    webhook doğrulamasında kullanılır. `worker_deployed_at`: son deploy zamanı.
 - **users** — mevcut tabloya dokunulmaz; tenancy pivot ile bağlanır
 - **cloudflare_account_user** *(pivot, üyelik)* — `cloudflare_account_id, user_id,
   role (owner|member), timestamps`
@@ -368,9 +419,11 @@ kullanılır; sadece `endpoint`/bölge değişir):
 + S3 uyumlu disk anahtarları (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
 `AWS_DEFAULT_REGION`, `AWS_BUCKET`, `AWS_ENDPOINT`, `AWS_USE_PATH_STYLE_ENDPOINT`).
 
-> **Not:** `account_id`/`api_token` env değerleri yalnızca fallback/ilk kurulum
-> içindir. Multi-tenant modelde asıl kaynak **`cloudflare_accounts` tablosudur**;
-> her tenant kendi hesap ID'si ve şifreli token'ını taşır.
+> **Not:** `account_id`/`api_token`/`webhook_secret` env değerleri yalnızca
+> fallback/ilk kurulum içindir. Multi-tenant modelde asıl kaynak
+> **`cloudflare_accounts` tablosudur**; her tenant kendi hesap ID'si, şifreli
+> token'ı ve şifreli `webhook_secret`'ını taşır. `cf:deploy-worker` bu değerleri
+> DB'den okuyup Worker'a aktarır.
 
 ---
 
@@ -474,14 +527,18 @@ Tenant içi ince rol/izin gerekirse `bezhanSalleh/filament-shield` eklenir.
 > ekstra paket gerekmez. Token şifreleme Laravel yerleşik `encrypted` cast'i ile
 > yapılır — paket yok.
 
-**Cloudflare Worker (`workers/inbound-email/`)**
+**Cloudflare Worker (`cf/` klasörü)**
 
 | Paket | Neden |
 |-------|-------|
-| `wrangler` (dev dep) | Deploy/dev CLI |
+| `wrangler` (dev dep) | Deploy/dev CLI (`php artisan cf:deploy-worker` bunu çağırır) |
 | `postal-mime` | Gelen ham MIME parse |
 | `mimetext` | (opsiyonel) Worker'dan compose/reply |
 | `nodejs_compat` flag | mimetext/kripto için |
+
+> Deploy Laravel'den yönetilir: `cf/wrangler.toml` şablondan üretilir, ayarlar
+> Laravel config/DB'den gelir (bkz. §5.1.1). Sunucuda `node` + `npx wrangler`
+> gerekir.
 
 ---
 
@@ -490,8 +547,11 @@ Tenant içi ince rol/izin gerekirse `bezhanSalleh/filament-shield` eklenir.
 - **Token'lar DB'de `encrypted` cast ile** şifreli; loglara sızmaz; Filament'te
   maskeli gösterim.
 - **En dar API token scope'u** (Zone:Read, Email Routing:Edit, Email Sending:Edit).
-- **Webhook:** HMAC-SHA256 imza + timestamp toleransı (replay koruması) + rate
-  limit; body imzadan önce doğrulanır; imzasız istek reddedilir.
+- **Webhook:** **hesap-başı** HMAC-SHA256 imza (`webhook_secret` her tenant'ta
+  şifreli) + timestamp toleransı (replay koruması) + rate limit; `X-CF-Account`
+  ile hesap bulunup o secret'la doğrulanır; imzasız/eşleşmeyen istek reddedilir.
+  Secret'lar loglara yazılmaz; deploy sırasında `wrangler secret put` ile stdin'den
+  aktarılır (komut satırında görünmez).
 - **HTML mail render:** inbox'ta gelen HTML **sanitize** edilir (XSS/remote content),
   `Content-Security-Policy` ile izole iframe render.
 - **Ek dosyalar:** doğrudan public değil; imzalı geçici URL ile indirilir.
@@ -572,11 +632,15 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
 - **Çıktı:** mail adresleri/yönlendirmeler panelden tam yönetiliyor.
 
 ### Faz 4 — Gelen kutusu (tam mail servisi)
-- **Email Worker** (`workers/inbound-email/`): postal-mime parse + HMAC webhook +
-  ek dosyaları S3/R2'ye yükleme + `wrangler.toml`.
-- Laravel webhook route + HMAC middleware + `StoreIncomingEmail` job (gelen maili
-  doğru tenant'a `cloudflare_account_id` ile bağlar).
-- Migration+Model: `emails` (portatif arama), thread bağlama.
+- **`cf/` Worker projesi:** `src/inbound-email.js` (postal-mime parse + HMAC +
+  `X-CF-Account`) + `wrangler.toml.stub` + `package.json`.
+- **`php artisan cf:deploy-worker`** komutu: şablonu Laravel config/DB'den render
+  eder, `wrangler deploy` + `secret put` çalıştırır; admin panelinde "Worker'ı
+  deploy et" aksiyonu. `cloudflare_accounts`'a `webhook_secret` + `worker_deployed_at`.
+- Laravel webhook route + `X-CF-Account`→hesap→per-account HMAC middleware +
+  `StoreIncomingEmail` job (doğru tenant + `mailbox_id` çözümü).
+- Migration+Model: `emails` (portatif arama), thread bağlama; base64 ekler
+  `attachments_disk`'e.
 - Filament **InboxResource**: liste/filtre/arama, güvenli HTML görüntüleme, ek indirme,
   okundu/yıldız, **Yanıtla/İlet** (Faz 2 giden akışına bağlanır).
 - **Çıktı:** gelen mailler arayüzde görüntüleniyor, yanıtlanıyor — tam mail servisi.
@@ -619,6 +683,10 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
   email+şifre, tek mailbox, tenancy'siz); `/admin` = **tenancy'li admin paneli**
   (`web` guard). `mailboxes` tablosu Authenticatable; şifreyi admin atar. İki panel
   ayrı guard'larla tamamen izole (Faz 5).
+- ✅ **Worker `cf/` klasöründe, Laravel-güdümlü deploy:** Worker kaynağı repoda
+  `cf/`; ayarlar (webhook URL/secret/hesap) elle yazılmaz, `php artisan
+  cf:deploy-worker` ile Laravel config/DB'den render edilip `wrangler deploy`
+  edilir. Hesap-başı `webhook_secret`; `X-CF-Account` ile doğrulama (Faz 4).
 
 ### Sonraki adım
 Faz 0'dan (config + Filament tenancy + `CloudflareAccount` modeli + bağlantı testi)
