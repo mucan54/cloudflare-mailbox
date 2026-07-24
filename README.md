@@ -62,21 +62,83 @@ php artisan cf:worker:sync              # redeploy drifted tenants (idempotent)
 
 ## Production (Coolify)
 
-A [`Dockerfile`](Dockerfile) is included (PHP + Node + wrangler + FrankenPHP).
+A [`Dockerfile`](Dockerfile) is included (php-fpm + nginx via serversideup/php, plus
+Node + `wrangler` so the inbound Worker can be deployed from the container).
 
-1. Point Coolify at this repo; it builds the Dockerfile.
-2. Set env: `APP_KEY`, `APP_URL` (your real domain — the webhook base), `DB_*` (MySQL),
-   S3 keys (`AWS_*`, `AWS_ENDPOINT`), `CLOUDFLARE_ATTACHMENTS_DISK=s3`, optionally
-   `QUEUE_CONNECTION=redis`.
-3. Post-deployment command (reconciles Workers when `APP_URL`/secrets change):
+### Step by step
+
+1. **New Resource → Application → your Git repository.** Pick this repo and the
+   branch you want to deploy.
+2. **Build Pack: `Dockerfile`** — *not* Nixpacks. Coolify auto-detects the
+   `Dockerfile` at the repo root. (Nixpacks would ignore it and ship without
+   `wrangler`, breaking the Deploy-Worker feature.)
+3. **Port: `8080`** — the serversideup/php image serves on 8080. Set this as the
+   app's exposed/port mapping. Health check path: `/up`.
+4. **Add a MySQL database** (Coolify → Databases) and, optionally, Redis. Copy the
+   connection details into the env below.
+5. **Environment variables** (Coolify → Environment Variables):
+   ```env
+   APP_NAME="Cloudflare Mailbox"
+   APP_ENV=production
+   APP_DEBUG=false
+   APP_KEY=            # generate once locally: php artisan key:generate --show
+   APP_URL=https://mail.yourdomain.com   # your real domain (webhook base + SW scope)
+
+   DB_CONNECTION=mysql
+   DB_HOST=...         # the Coolify MySQL service host
+   DB_PORT=3306
+   DB_DATABASE=...
+   DB_USERNAME=...
+   DB_PASSWORD=...
+
+   QUEUE_CONNECTION=database     # simplest; switch to redis + a worker later
+   SESSION_DRIVER=database
+   CACHE_STORE=database
+
+   # Attachments (Cloudflare R2 / S3 / MinIO)
+   CLOUDFLARE_ATTACHMENTS_DISK=s3
+   AWS_ACCESS_KEY_ID=...
+   AWS_SECRET_ACCESS_KEY=...
+   AWS_DEFAULT_REGION=auto
+   AWS_BUCKET=...
+   AWS_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com
+   AWS_USE_PATH_STYLE_ENDPOINT=true
+
+   # Web Push — generate once locally with: php artisan webpush:generate
+   # then copy the two keys here (do NOT rely on writing .env in the container)
+   VAPID_PUBLIC_KEY=...
+   VAPID_PRIVATE_KEY=...
+   VAPID_SUBJECT=mailto:you@yourdomain.com
+   ```
+6. **Post-deployment command** (Coolify → Configuration → *Post-deployment
+   Command*): runs migrations and reconciles inbound Workers when `APP_URL`/secrets
+   change:
    ```bash
    php artisan migrate --force && php artisan cf:worker:sync
    ```
-4. Run a queue worker (`php artisan queue:work`) and the scheduler as separate
-   processes/services.
+7. **Set your custom domain** in Coolify and let it issue TLS. HTTPS is required for
+   the PWA / Web Push and for the Cloudflare Worker to reach the webhook.
+8. Deploy. Open `https://mail.yourdomain.com/admin`, create the admin user (or run
+   `php artisan db:seed` once via Coolify's terminal), then connect Cloudflare.
 
-Tenant Cloudflare tokens and webhook secrets live encrypted in the database, never in
-env.
+### Notes
+
+- **APP_URL must be your real public domain** — it is both the inbound webhook base
+  (`{APP_URL}/api/cf/incoming`) and the SPA service-worker scope.
+- **Queue:** `QUEUE_CONNECTION=database` runs jobs on the next scheduler tick or a
+  worker. For instant delivery/notifications add a second Coolify resource running
+  `php artisan queue:work`, or start with `sync` for the simplest setup.
+- Tenant Cloudflare tokens and webhook secrets live **encrypted in the database**,
+  never in env.
+- `php artisan cf:deploy-worker` / `cf:worker:sync` need outbound HTTPS to Cloudflare
+  from the container (already allowed on standard Coolify networking).
+
+### Prefer Nixpacks?
+
+You can deploy just the Laravel app with Nixpacks, but the container won't have
+`wrangler`, so you'd deploy the inbound Worker separately (locally or via CI:
+`cd cf && npx wrangler deploy`). The Dockerfile path keeps everything in one place —
+recommended.
 
 ## Testing
 
