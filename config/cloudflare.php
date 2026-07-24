@@ -50,9 +50,10 @@ return [
         'name' => 'Cloudflare Mailbox',
         'dashboard_url' => 'https://dash.cloudflare.com/profile/api-tokens',
         'permission_groups' => [
-            ['key' => 'email_routing', 'type' => 'edit'],
-            ['key' => 'email_sending', 'type' => 'edit'],
-            ['key' => 'zone', 'type' => 'read'],
+            ['key' => 'email_routing_addresses', 'type' => 'edit'], // Account
+            ['key' => 'email_routing_rules', 'type' => 'edit'],     // Zone
+            ['key' => 'email_sending', 'type' => 'edit'],           // Account (confirmed)
+            ['key' => 'zone', 'type' => 'read'],                    // Zone (confirmed)
         ],
     ],
 
