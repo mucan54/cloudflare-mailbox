@@ -66,10 +66,15 @@ kullanılır: tüm kaynaklar (domain, kural, adres, inbox, giden) aktif tenant'a
 scope'lanır, panelde tenant switcher bulunur, kullanıcılar hesaplara pivot tablo
 ile üye olur. Ayrıntı: [§8.2](#82-multi-tenancy-filament).
 
-**İki kimlik yüzeyi:** Ayrıca son kullanıcılar için **mailbox portalı** vardır —
-kök `/` adresinden email + şifre ile giriş yapılır, kullanıcı yalnız kendi mail
-kutusunu kullanır (tenancy'den bağımsız, çünkü mail adresi global benzersizdir).
-Yöneticiler `/admin` tenancy'li panele girer. Ayrıntı: [§8.1](#81-paneller--kimlik-yüzeyleri).
+**İki ayrı uygulama yüzeyi:**
+- **Admin (`/admin`)** — **Filament** (tenancy'li). Yöneticiler domain/kural/mailbox
+  yönetir. Admin işi için Filament ideal.
+- **Mailbox portalı** — **headless**: Laravel salt-JSON **mailbox API'si**
+  (`mailbox` guard, **Sanctum**) + ayrı bir **Vue SPA** (PWA). Native mail-app
+  hissiyatı için Filament kullanılmaz. Son kullanıcı email + şifre ile giriş yapar,
+  yalnız kendi mail kutusunu kullanır (tenancy'den bağımsız; mail adresi global
+  benzersiz). Her adres kendi başına login olur. Ayrıntı:
+  [§8.1](#81-uygulama-yüzeyleri--kimlik) ve [§8.4](#84-mailbox-portalı-headless-spa--pwa).
 
 ---
 
@@ -109,7 +114,8 @@ Yöneticiler `/admin` tenancy'li panele girer. Ayrıntı: [§8.1](#81-paneller--
 - **Gelen:** mail → Cloudflare MX → routing rule (**catch-all → Worker**, §5.0) →
   Email Worker ham MIME'yi `postal-mime` ile parse eder, küçük ekleri base64 gövdede /
   büyükleri R2'ye koyar, Laravel'e HMAC imzalı JSON POST atar → `StoreIncomingEmail`
-  job (idempotent) → `emails` tablosu → Filament Inbox.
+  job (idempotent) → `emails` tablosu → **Web Push bildirimi** → **admin: Filament
+  Inbox / son kullanıcı: Vue SPA (PWA)**.
 - **Yönetim:** Filament Resource'ları `CloudflareClient` üzerinden Cloudflare'deki
   zone/rule/address kaynaklarını okur/yazar; yerel DB senkron kopya (cache) tutar.
 
@@ -419,6 +425,10 @@ sürücüde de çalışacak şekilde portatif yazılır (bkz. [§11](#11-test--c
     `cloudflare_account_id`/`domain_id` altında durur.
   - Not: gerçekten mail alması için ilgili adreste "Send to Worker" routing kuralı
     olmalı (mailbox oluştururken garanti edilir).
+  - `HasPushSubscriptions` uygular (Web Push hedefi mailbox'tır).
+- **push_subscriptions** *(webpush paketi)* — `id, subscribable_type/id (→ mailbox),
+  endpoint, public_key, auth_token, content_encoding, timestamps`. SPA'nın kaydettiği
+  cihaz abonelikleri; bildirimler buraya gönderilir.
 - **emails** (inbox) — `id, cloudflare_account_id, domain_id, mailbox_id (nullable),
   message_id, ingest_key, in_reply_to, references (json), from_name, from_email,
   to_email, cc (json), subject, text_body, html_body, headers (json), raw_size,
@@ -522,22 +532,24 @@ kullanılır; sadece `endpoint`/bölge değişir):
 
 ## 8. Filament arayüz yapısı
 
-### 8.1 Paneller & kimlik yüzeyleri
+### 8.1 Uygulama yüzeyleri & kimlik
 
-Uygulamanın **iki ayrı Filament paneli** ve **iki ayrı auth guard**'ı vardır:
+Uygulamanın **iki ayrı yüzeyi** ve **iki ayrı auth guard**'ı vardır — biri Filament,
+biri headless:
 
-| Panel | Yol | Guard / provider | Kimler | Kapsam |
-|-------|-----|------------------|--------|--------|
-| **Mailbox portalı** | `/` (kök) | `mailbox` guard → `mailboxes` tablosu | Son kullanıcı (tek mail adresi) | Sadece kendi gelen kutusu + kendi adresinden compose; tenancy YOK, switcher YOK |
-| **Admin panel** | `/admin` | `web` guard → `users` tablosu | Yönetici | Domain/kural/adres/gönderim yönetimi, tüm mailbox'lar; **tenancy'li** (tenant switcher) |
+| Yüzey | Yol | Teknoloji | Guard / provider | Kimler | Kapsam |
+|-------|-----|-----------|------------------|--------|--------|
+| **Mailbox portalı** | `/` (kök) | **Vue SPA + Laravel API** (headless, PWA) | `mailbox` guard (**Sanctum**) → `mailboxes` | Son kullanıcı (tek mail adresi) | Sadece kendi gelen kutusu + kendi adresinden compose; tenancy YOK |
+| **Admin panel** | `/admin` | **Filament** | `web` guard → `users` | Yönetici | Domain/kural/adres/mailbox/gönderim yönetimi; **tenancy'li** |
 
-- **Kök (`/`) mailbox girişi:** kullanıcı email + şifre girer → global benzersiz
-  `email` ile `mailboxes` çözülür → doğrudan o mailbox'a düşer. Tenant seçmez,
-  admin panelini göremez.
-- **`/admin` yöneticiler için:** Filament tenancy'li panel (aşağıda §8.2). Farklı
-  guard olduğundan mailbox girişi asla admin paneline erişemez, tam tersi de.
-- İki panel Filament bileşenlerini paylaşır (InboxResource/Compose yeniden
-  kullanılır), yalnız scope ve guard farklıdır.
+- **Kök (`/`) mailbox girişi:** kullanıcı email + şifre girer → Sanctum ile oturum →
+  global benzersiz `email` ile `mailboxes` çözülür → yalnız o mailbox. Tenant seçmez,
+  admin'i göremez.
+- **`/admin` yöneticiler için:** Filament tenancy'li panel (§8.2). Ayrı guard →
+  mailbox girişi admin'e, admin girişi mailbox'a erişemez.
+- **Neden mailbox tarafı Filament değil:** Filament admin/CRUD için tasarlı; native
+  mail-app hissiyatı için headless API + SPA daha uygun (tam UX kontrolü, PWA, ileride
+  aynı API'yle native mobil). Ayrıntı §8.4.
 
 ### 8.2 Multi-tenancy (Filament)
 
@@ -681,18 +693,63 @@ job'ları sırayla; ilerleme Filament notification/progress ile gösterilir; tek
 Yetkilendirme: Filament auth + **tenant üyeliği** (pivot `role`: owner/member).
 Tenant içi ince rol/izin gerekirse `bezhanSalleh/filament-shield` eklenir.
 
-### 8.4 Mailbox portalı (kök panel) içeriği
+### 8.4 Mailbox portalı (headless SPA + PWA)
 
-`app/Filament/Mailbox/` (ayrı panel, `mailbox` guard). Tümü aktif mailbox'ın
-`mailbox_id`'sine scope'lu:
+Mailbox tarafı **Filament değil**; Laravel headless API + **Vue SPA** (PWA). Native
+mail-app hissiyatı hedeflenir.
 
-- **Inbox** — sadece kendi gelen kutusu; okundu/yıldız, arama, güvenli HTML görüntüleme,
-  ek indirme, **Yanıtla/İlet**.
-- **Compose** — `from` kendi adresine kilitli; to/cc/bcc/konu/HTML/ek (≤5 MiB) → Faz 2
-  giden akışına bağlanır.
-- **Sent** — sadece kendi gönderdikleri.
-- **Hesap** — şifre değiştir (opsiyonel; admin de sıfırlayabilir).
-- Domain/kural/adres yönetimi ve tenant switcher **YOK**.
+**Backend — Mailbox API** (`routes/mailbox-api.php`, `mailbox` guard + Sanctum):
+tümü aktif mailbox'ın `mailbox_id`'sine zorunlu scope'lu.
+
+| Uç | İşlev |
+|----|-------|
+| `POST /api/mailbox/login` · `POST /logout` | Sanctum oturum (email+şifre); `login_enabled` + rate-limit |
+| `GET /api/mailbox/me` | Profil, sayaçlar (okunmamış) |
+| `GET /api/mailbox/emails` | Inbox: sayfalama, arama, filtre (okundu/yıldız/klasör) |
+| `GET /api/mailbox/emails/{id}` | Tek mail (güvenli HTML + ek meta) |
+| `PATCH /api/mailbox/emails/{id}` | okundu/yıldız/klasör güncelle |
+| `GET /api/mailbox/attachments/{id}` | İmzalı geçici indirme |
+| `POST /api/mailbox/send` | Gönder (`from` kendi adresine kilitli) → Faz 2 giden akışı |
+| `GET /api/mailbox/sent` | Giden log |
+| `POST /api/mailbox/push-subscribe` · `DELETE` | Web Push aboneliği kaydet/sil |
+| `PUT /api/mailbox/password` | Şifre değiştir |
+
+**Auth modları (web + mobil):** Aynı API iki modu destekler:
+- **Web SPA** → Sanctum **SPA oturumu** (same-origin cookie).
+- **Mobil (ileri faz)** → Sanctum **bearer token** (login token döndürür). Self-host
+  desenine uygun: mobil uygulama önce **CF-Mailbox instance adresi (base URL)** ister,
+  sonra email + şifreyle giriş yapar (tek ekstra parametre). API headless olduğundan
+  aynı backend'e bağlanır; şimdiden token modu tasarlanır → ileride rework yok.
+
+**Frontend — Vue SPA + PWA** (`resources/mailbox/`, Vite ile ayrı build, kök `/`):
+- Vue 3 (Composition) + Pinia + Vue Router; `vite-plugin-pwa` (manifest + service
+  worker + "Ana ekrana ekle"). *(React+aynı desen alternatif.)*
+- Native-app dokunuşları: unified/klasörlü inbox, hızlı yanıt, optimistic UI, çevrimdışı
+  kabuk, pull-to-refresh, koyu tema.
+- **Web Push:** SW push event → sistem bildirimi (tarayıcı kapalıyken de). Abonelik
+  `mailbox` kimliğine bağlı (bkz. §8.5).
+- **filament-pwa kullanılmaz** (o yalnız Filament panelleri için); mailbox PWA'sı
+  vite-plugin-pwa ile yapılır. filament-pwa yalnız **admin** panelini kurulabilir
+  yapmak istenirse (opsiyonel) kullanılır.
+
+### 8.5 PWA & Web Push (bildirimler)
+
+"Tarayıcı kapalıyken bile bildirim" için **PWA + VAPID Web Push**
+(`laravel-notification-channels/webpush`):
+
+- **Abonelik:** `Mailbox` modeli `HasPushSubscriptions` uygular (rehberdeki gibi
+  `User`'a değil — bildirim hedefi mailbox'tır). SPA, SW'yi kaydeder, kullanıcı
+  hareketiyle izin ister, aboneliği `POST /api/mailbox/push-subscribe`'a gönderir.
+- **Tetikleyici:** `StoreIncomingEmail` yeni mail yazınca ilgili mailbox'a
+  `IncomingMailNotification` (WebPushChannel, `ShouldQueue`) → "Yeni mailin var"
+  push'u; tıklanınca ilgili mail açılır.
+- **VAPID:** anahtarlar `.env`'de (`webpush:generate`); public key SPA'ya endpoint/env
+  ile verilir (JS'e hardcode edilmez).
+- **iOS gerçeği (kritik):** iOS'ta Web Push **yalnız** kullanıcı PWA'yı **Ana Ekrana
+  eklerse** (Share → Add to Home Screen), **iOS 16.4+** ve **kullanıcı hareketiyle**
+  çalışır. Normal Safari sekmesinde push YOK. SPA iOS'ta önce "Ana ekrana ekle"
+  yönlendirmesi gösterir, sonra kurulu modda izin ister.
+- **HTTPS zorunlu** (Coolify TLS sağlar).
 
 ---
 
@@ -706,9 +763,20 @@ Tenant içi ince rol/izin gerekirse `bezhanSalleh/filament-shield` eklenir.
 | `laravel/horizon` + Redis | Prod önerilir | Kuyruk (webhook işleme, giden gönderim). Dev'de `database` queue yeter. |
 | `zbateson/mail-mime-parser` | Şartlı | Ham MIME'yi Laravel tarafında parse gerekirse (asıl parse Worker'da postal-mime ile yapılırsa gerekmez). |
 | `league/flysystem-aws-s3-v3` | **Gerekli** | S3 uyumlu ek depolama (AWS S3 / R2 / MinIO). |
-| `spatie/laravel-data` | Opsiyonel | DTO'lar / temiz payload tipleri. |
+| `laravel/sanctum` | **Gerekli** | Mailbox API auth (SPA cookie + mobil bearer token). |
+| `laravel-notification-channels/webpush` | **Gerekli** | VAPID Web Push (mailbox bildirimleri); `push_subscriptions` tablosu. |
+| `spatie/laravel-data` | Opsiyonel | DTO'lar / temiz payload tipleri (API yanıtları). |
 | `bezhanSalleh/filament-shield` | Opsiyonel | Tenant içi ince rol/izin gerekirse. |
+| `tomatophp/filament-pwa` | Opsiyonel | **Yalnız admin** panelini kurulabilir yapmak istenirse (Filament v5 uyumu doğrulanmalı). Mailbox PWA'sı bununla DEĞİL, vite-plugin-pwa ile yapılır. |
 | `pestphp/pest` | Önerilen | Test (composer'da plugin izni açık). |
+
+**Mailbox SPA (frontend, `resources/mailbox/`)**
+
+| Paket | Neden |
+|-------|-------|
+| `vue` (3) + `vue-router` + `pinia` | SPA (React+alternatif) |
+| `vite-plugin-pwa` | Manifest + service worker + "Ana ekrana ekle" (mailbox PWA) |
+| `axios` | API çağrıları (Sanctum) |
 
 > Filament v5 zaten `composer.json`'da. Notifications/Widgets Filament ile gelir,
 > ekstra paket gerekmez. Token şifreleme Laravel yerleşik `encrypted` cast'i ile
@@ -748,8 +816,11 @@ Tenant içi ince rol/izin gerekirse `bezhanSalleh/filament-shield` eklenir.
 - **Mailbox portalı izolasyonu:** `mailbox` guard'ı `web` (admin) guard'ından
   tamamen ayrıdır; mailbox girişi admin paneline **erişemez**. Şifreler `bcrypt`
   ile hash'lenir, admin atar/sıfırlar; login rate-limit'li; `login_enabled=false`
-  ise giriş kapalı. Mailbox portalındaki tüm sorgular `mailbox_id` ile zorunlu
+  ise giriş kapalı. Mailbox API'sindeki tüm sorgular `mailbox_id` ile zorunlu
   scope'ludur (global scope ile sızıntı engellenir).
+- **Mailbox API (Sanctum):** Web SPA same-origin cookie + CSRF; mobil bearer token
+  (iptal edilebilir, dar yetkili). CORS yalnız güvenilen origin'lere. Push public
+  key hariç VAPID private key sunucuda kalır. Ek indirme imzalı geçici URL.
 
 ---
 
@@ -855,16 +926,22 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
   okundu/yıldız, **Yanıtla/İlet** (Faz 2 giden akışına bağlanır).
 - **Çıktı:** gelen mailler arayüzde görüntüleniyor, yanıtlanıyor — tam mail servisi.
 
-### Faz 5 — Mailbox portalı (son kullanıcı girişi)
-- Migration+Model: `mailboxes` (Authenticatable, hash'li şifre); `emails`/`sent_emails`
-  tablolarına `mailbox_id`; webhook ingest'te `to_email → mailbox_id` çözümü.
-- `mailbox` auth guard + provider; login rate-limit.
+### Faz 5 — Mailbox portalı (headless SPA + PWA + push)
+- Migration+Model: `mailboxes` (Authenticatable, hash'li şifre, `HasPushSubscriptions`);
+  `emails`/`sent_emails`'e `mailbox_id`; `push_subscriptions`; webhook ingest'te
+  `to_email → mailbox_id` çözümü.
+- `mailbox` guard + **Sanctum** (SPA cookie + mobil bearer token); login rate-limit.
+- **Mailbox API** (§8.4): login/me/emails/send/attachments/push-subscribe…; hepsi
+  `mailbox_id`'ye zorunlu scope.
+- **Vue SPA + vite-plugin-pwa** kök `/`'te: inbox/mail/compose/sent, native dokunuşlar,
+  çevrimdışı kabuk.
+- **Web Push:** `webpush` + VAPID; `StoreIncomingEmail` → `IncomingMailNotification`
+  (ShouldQueue) → "yeni mail" push. iOS: "ana ekrana ekle" akışı (§8.5).
 - Admin panelinde **MailboxResource** (email seç, şifre ata/sıfırla, `login_enabled`,
   "Send to Worker kuralını garanti et").
-- **İkinci Filament paneli** kök `/` yolunda (`mailbox` guard, tenancy yok):
-  Inbox + Compose + Sent + Hesap; hepsi `mailbox_id`'ye scope'lu.
-- **Çıktı:** kullanıcı `/` üzerinden email+şifre ile girip yalnız kendi mailbox'ını
-  kullanıyor; admin `/admin` tenancy'li panelde. İki yüzey tamamen izole.
+- **Çıktı:** kullanıcı `/`'te email+şifre ile girip kendi mailbox'ını native-app
+  hissiyatıyla kullanıyor, tarayıcı kapalıyken bildirim alıyor; admin `/admin`
+  Filament'te. İki yüzey ayrı guard'la izole.
 
 ### Faz 6 — Cila & üretim
 - **SetupWizard/Onboarding sayfası** + **Kurulum kontrol listesi** & **Sistem sağlığı**
@@ -878,6 +955,13 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
   queue+scheduler process'leri, post-deploy hook (`migrate --force && cf:worker:sync`),
   `cf:worker:sync`/`cf:worker:status` komutları + drift rozeti.
 - Dokümantasyon: kurulum (token oluşturma, Worker deploy, DNS, Coolify) rehberi.
+
+### Faz 7 — Mobil uygulama (opsiyonel, ileri faz)
+- Mailbox API'sinin **bearer token** modu (Faz 5'te hazır) üzerine native/cross-platform
+  mobil uygulama.
+- Onboarding: **CF-Mailbox instance adresi** (base URL) → email + şifre.
+- Push: native FCM/APNs köprüsü veya aynı VAPID aboneliği (platforma göre).
+- Backend'de **rework yok** — aynı headless API.
 
 ---
 
@@ -913,6 +997,18 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
 - ✅ **Ayar saklama:** Per-tenant ayarlar `CloudflareAccount` modelinde (ekstra paket
   yok). `filament-spatie-settings` **kullanılmaz** (global-singleton; per-tenant'a
   uymaz + Filament v5 uyumu belirsiz). Bkz. §8.2.3.
+- ✅ **Çoklu mailbox girişi:** DB'deki her mail adresi **tenant-bağımsız, ayrı ayrı**
+  login olur (harici Gmail/Outlook DEĞİL). Mevcut `mailboxes` modeliyle uyumlu.
+- ✅ **Mailbox tarafı headless:** Filament **değil** — Laravel salt-JSON mailbox API
+  (`mailbox` guard + **Sanctum**) + **Vue SPA (PWA)**. Native mail-app hissiyatı.
+  Admin tarafı Filament kalır. Bkz. §8.1, §8.4.
+- ✅ **PWA + Web Push (Faz 5):** `vite-plugin-pwa` (mailbox PWA) +
+  `laravel-notification-channels/webpush` (VAPID). `HasPushSubscriptions` **`Mailbox`**
+  modelinde. iOS: yalnız "ana ekrana ekli" PWA'da push. `filament-pwa` sadece admin
+  için opsiyonel. Bkz. §8.5.
+- ✅ **Mobil'e hazır API:** Sanctum bearer token modu Faz 5'te tasarlanır; mobil
+  uygulama (ileri **Faz 7**) "instance adresi + email + şifre" ile aynı API'ye bağlanır,
+  backend rework yok. Bkz. §8.4, Faz 7.
 
 ### Sonraki adım
 Faz 0'dan (config + Filament tenancy + `CloudflareAccount` modeli + bağlantı testi)
