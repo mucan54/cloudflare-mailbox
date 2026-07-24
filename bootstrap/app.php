@@ -14,6 +14,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Behind Coolify's reverse proxy (TLS terminated there): trust the
+        // X-Forwarded-* headers so Laravel knows requests are HTTPS.
+        $middleware->trustProxies(at: '*');
+
         // The Cloudflare Email Worker posts here with its own HMAC signature.
         $middleware->validateCsrfTokens(except: [
             'api/cf/*',

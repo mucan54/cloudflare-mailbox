@@ -34,7 +34,7 @@ cp .env.example .env
 php artisan key:generate
 touch database/database.sqlite
 php artisan migrate --seed          # seeds admin@example.com / password
-php artisan webpush:generate        # VAPID keys for Web Push
+php artisan webpush:vapid        # VAPID keys for Web Push
 npm install
 npm run build                       # or: npm run dev
 php artisan serve
@@ -70,18 +70,19 @@ included [`docker-compose.yaml`](docker-compose.yaml). It builds the
 1. **Build Pack: `Docker Compose`** (Configuration → General). Set Docker Compose
    Location to `/docker-compose.yaml`. (Not Nixpacks — it would ship without
    `wrangler` and break Deploy-Worker.)
-2. **Environment Variables** — you only add the secrets Coolify can't generate:
+2. **Environment Variables** — only the attachment (R2/S3) secrets are needed, and
+   even those are optional (mail send/receive works without them; only storing
+   attachments needs them):
    ```env
-   APP_KEY=            # php artisan key:generate --show
-   VAPID_PUBLIC_KEY=   # php artisan webpush:generate
-   VAPID_PRIVATE_KEY=
-   VAPID_SUBJECT=mailto:you@yourdomain.com
    AWS_ACCESS_KEY_ID=…       AWS_SECRET_ACCESS_KEY=…
    AWS_BUCKET=…              AWS_ENDPOINT=https://<id>.r2.cloudflarestorage.com
    ```
-   Coolify auto-fills the domain (`SERVICE_URL_APP` → `APP_URL`) and the MySQL
-   password (`SERVICE_PASSWORD_MYSQL`). MySQL, Redis, the queue worker and the
-   scheduler come up automatically; migrations run on boot (serversideup AUTORUN).
+   Everything else is automatic: Coolify generates & persists `APP_KEY`
+   (`SERVICE_REALBASE64_APPKEY`), the domain (`SERVICE_URL_APP` → `APP_URL`), and the
+   MySQL password (`SERVICE_PASSWORD_MYSQL`); `VAPID_SUBJECT` defaults to the app URL.
+   MySQL, Redis, the queue worker and the scheduler come up on their own; migrations
+   run on boot (serversideup AUTORUN). Web Push is off until you set a VAPID keypair
+   (see below).
 3. **Deploy**, then open `https://<your-domain>/admin` and create the admin user from
    the Coolify **Terminal**: `php artisan db:seed`.
 4. Deploy the inbound Worker from the admin panel's **Deploy Worker** action (or the
@@ -96,9 +97,10 @@ Push is off until you set a VAPID keypair. It can't be auto-generated (it's a st
 EC keypair — rotating it breaks every existing subscription), so generate it **once**
 and set two env vars:
 
-1. In the Coolify **Terminal** (or locally), run:
+1. In the Coolify **Terminal**, run (the `--show` flag prints the keys instead of
+   writing a `.env`, which the container doesn't have):
    ```bash
-   php artisan webpush:generate
+   php artisan webpush:vapid --show
    ```
    It prints a `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`.
 2. Add both to Coolify → **Environment Variables** and redeploy.

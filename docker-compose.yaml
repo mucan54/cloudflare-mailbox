@@ -40,7 +40,7 @@ x-app-env: &app-env
 
   # Web Push. Subject auto-defaults to the app URL. The keypair is OPTIONAL:
   # leave empty and the app runs with push disabled; generate once when you want
-  # push (php artisan webpush:generate) and set both — they must stay stable.
+  # push (php artisan webpush:vapid --show) and set both — they must stay stable.
   VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
   VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
   VAPID_SUBJECT: ${VAPID_SUBJECT:-${SERVICE_URL_APP}}
