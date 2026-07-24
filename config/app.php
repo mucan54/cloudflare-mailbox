@@ -78,7 +78,13 @@ return [
     |
     */
 
-    'locale' => env('APP_LOCALE', 'en'),
+    'locale' => env('APP_LOCALE', 'tr'),
+
+    // Locales the admin panel can switch between (code => label).
+    'available_locales' => [
+        'en' => 'English',
+        'tr' => 'Türkçe',
+    ],
 
     'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
 

@@ -17,11 +17,17 @@ class SentEmailResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedPaperAirplane;
 
-    protected static ?string $navigationLabel = 'Giden';
-
-    protected static ?string $modelLabel = 'giden mail';
-
     protected static string|UnitEnum|null $navigationGroup = 'Mail';
+
+    public static function getNavigationLabel(): string
+    {
+        return __('Sent');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('sent mail');
+    }
 
     protected static ?int $navigationSort = 20;
 

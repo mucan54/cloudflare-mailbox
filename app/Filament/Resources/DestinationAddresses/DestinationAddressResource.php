@@ -17,11 +17,17 @@ class DestinationAddressResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedInbox;
 
-    protected static ?string $navigationLabel = 'Hedef adresler';
-
-    protected static ?string $modelLabel = 'hedef adres';
-
     protected static string|UnitEnum|null $navigationGroup = 'Cloudflare';
+
+    public static function getNavigationLabel(): string
+    {
+        return __('Destination addresses');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('destination address');
+    }
 
     protected static ?int $navigationSort = 30;
 

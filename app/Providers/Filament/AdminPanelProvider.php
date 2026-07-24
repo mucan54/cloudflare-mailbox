@@ -7,6 +7,7 @@ use App\Filament\Widgets\LatestEmails;
 use App\Filament\Widgets\SetupChecklist;
 use App\Filament\Widgets\StatsOverview;
 use App\Models\CloudflareAccount;
+use Filament\Actions\Action;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -34,6 +35,16 @@ class AdminPanelProvider extends PanelProvider
             ->tenant(CloudflareAccount::class, slugAttribute: 'slug', ownershipRelationship: 'account')
             ->tenantRegistration(RegisterCloudflareAccount::class)
             ->tenantMenu()
+            ->userMenuItems([
+                Action::make('lang-en')
+                    ->label('English')
+                    ->icon('heroicon-o-language')
+                    ->url(fn () => url('/locale/en')),
+                Action::make('lang-tr')
+                    ->label('Türkçe')
+                    ->icon('heroicon-o-language')
+                    ->url(fn () => url('/locale/tr')),
+            ])
             ->colors([
                 'primary' => Color::Amber,
             ])

@@ -28,9 +28,12 @@ class Settings extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
 
-    protected static ?string $navigationLabel = 'Ayarlar';
-
     protected static string|UnitEnum|null $navigationGroup = 'Cloudflare';
+
+    public static function getNavigationLabel(): string
+    {
+        return __('Settings');
+    }
 
     protected static ?int $navigationSort = 90;
 

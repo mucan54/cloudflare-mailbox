@@ -23,9 +23,12 @@ class Compose extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedPencilSquare;
 
-    protected static ?string $navigationLabel = 'Mail gönder';
-
     protected static string|UnitEnum|null $navigationGroup = 'Mail';
+
+    public static function getNavigationLabel(): string
+    {
+        return __('Compose');
+    }
 
     protected static ?int $navigationSort = 10;
 
