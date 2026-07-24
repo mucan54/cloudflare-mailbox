@@ -77,7 +77,15 @@ class RegisterCloudflareAccount extends RegisterTenant
             }
 
             if (count($accounts) === 0) {
-                Notification::make()->title('Bu token’a bağlı hesap bulunamadı')->danger()->send();
+                Notification::make()
+                    ->title('Hesap otomatik bulunamadı')
+                    ->body('Token’ınız hesapları listeleme iznine sahip olmayabilir. '
+                        .'“Account ID” alanını elle doldurun — Cloudflare panelinde Overview '
+                        .'sayfasının sağ alt köşesinde ya da dashboard URL’inizde bulabilirsiniz.')
+                    ->warning()
+                    ->persistent()
+                    ->send();
+
                 throw new Halt;
             }
 
