@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Filament\Pages\Tenancy\RegisterCloudflareAccount;
+use App\Filament\Support\DeployWorkerAction;
 use App\Models\CloudflareAccount;
 use App\Services\Cloudflare\CloudflareClient;
 use App\Services\Cloudflare\CloudflareException;
@@ -96,6 +97,8 @@ class Settings extends Page
                 ->icon(Heroicon::OutlinedSignal)
                 ->color('gray')
                 ->action('testConnection'),
+
+            DeployWorkerAction::make(),
         ];
     }
 
