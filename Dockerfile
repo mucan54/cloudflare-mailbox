@@ -34,5 +34,9 @@ COPY --chown=www-data:www-data --from=assets /app/public/build ./public/build
 
 RUN composer run-script post-autoload-dump --no-interaction || true
 
-# migrate + reconcile inbound Workers happen in the Coolify post-deploy command:
-#   php artisan migrate --force && php artisan cf:worker:sync
+ENV PHP_OPCACHE_ENABLE=1
+
+# serversideup automations (migrations, storage link, config cache) are enabled
+# per-service in docker-compose.yaml — only on the `app` service, so the worker
+# and scheduler never race migrations. The image already defines the entrypoint
+# (php-fpm + nginx on :8080) and a HEALTHCHECK; we don't override them.

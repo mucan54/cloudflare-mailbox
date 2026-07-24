@@ -1,0 +1,119 @@
+# Coolify "Docker Compose" build pack — full stack: app + queue worker +
+# scheduler + MySQL + Redis. Coolify fills the SERVICE_* magic variables
+# (domain + generated passwords). Set APP_KEY, VAPID_* and AWS_* in the Coolify
+# Environment Variables screen.
+
+x-app-env: &app-env
+  APP_NAME: "Cloudflare Mailbox"
+  APP_ENV: production
+  APP_DEBUG: "false"
+  APP_KEY: ${APP_KEY}
+  APP_URL: ${SERVICE_URL_APP}
+
+  LOG_CHANNEL: stderr
+  LOG_LEVEL: info
+
+  DB_CONNECTION: mysql
+  DB_HOST: mysql
+  DB_PORT: "3306"
+  DB_DATABASE: ${MYSQL_DATABASE:-mailbox}
+  DB_USERNAME: ${MYSQL_USER:-mailbox}
+  DB_PASSWORD: ${SERVICE_PASSWORD_MYSQL}
+
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+
+  QUEUE_CONNECTION: redis
+  CACHE_STORE: redis
+  SESSION_DRIVER: redis
+
+  # Attachments (Cloudflare R2 / S3 / MinIO)
+  CLOUDFLARE_ATTACHMENTS_DISK: ${CLOUDFLARE_ATTACHMENTS_DISK:-s3}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+  AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-auto}
+  AWS_BUCKET: ${AWS_BUCKET}
+  AWS_ENDPOINT: ${AWS_ENDPOINT}
+  AWS_USE_PATH_STYLE_ENDPOINT: "true"
+
+  # Web Push (generate once locally: php artisan webpush:generate)
+  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+  VAPID_SUBJECT: ${VAPID_SUBJECT}
+
+  CLOUDFLARE_SEND_DRIVER: ${CLOUDFLARE_SEND_DRIVER:-api}
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cloudflare-mailbox:latest
+    environment:
+      <<: *app-env
+      # Tells Coolify to assign this service a public domain on port 8080.
+      SERVICE_FQDN_APP_8080: /
+      # Boot-time automations (this service only): run migrations, link storage.
+      AUTORUN_ENABLED: "true"
+      AUTORUN_LARAVEL_MIGRATION: "true"
+      AUTORUN_LARAVEL_STORAGE_LINK: "true"
+      AUTORUN_LARAVEL_CONFIG_CACHE: "true"
+      AUTORUN_LARAVEL_ROUTE_CACHE: "true"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  worker:
+    image: cloudflare-mailbox:latest
+    command: php artisan queue:work --sleep=1 --tries=3 --timeout=120 --max-time=3600
+    environment: *app-env
+    depends_on:
+      app:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scheduler:
+    image: cloudflare-mailbox:latest
+    command: sh -c "while true; do php artisan schedule:run --verbose --no-interaction; sleep 60; done"
+    environment: *app-env
+    depends_on:
+      app:
+        condition: service_started
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-mailbox}
+      MYSQL_USER: ${MYSQL_USER:-mailbox}
+      MYSQL_PASSWORD: ${SERVICE_PASSWORD_MYSQL}
+      MYSQL_ROOT_PASSWORD: ${SERVICE_PASSWORD_MYSQLROOT}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${SERVICE_PASSWORD_MYSQLROOT}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+  redis-data:

@@ -65,7 +65,39 @@ php artisan cf:worker:sync              # redeploy drifted tenants (idempotent)
 A [`Dockerfile`](Dockerfile) is included (php-fpm + nginx via serversideup/php, plus
 Node + `wrangler` so the inbound Worker can be deployed from the container).
 
-### Step by step
+### Option A — Docker Compose (recommended: app + MySQL + Redis + worker in one)
+
+A [`docker-compose.yaml`](docker-compose.yaml) bundles the whole stack, so you don't
+add MySQL/Redis as separate Coolify resources.
+
+1. **Build Pack: `Docker Compose`** (Configuration → General). Docker Compose Location:
+   `/docker-compose.yaml`.
+2. **Environment Variables** — you only need the secrets Coolify can't generate:
+   ```env
+   APP_KEY=            # php artisan key:generate --show
+   VAPID_PUBLIC_KEY=   # php artisan webpush:generate
+   VAPID_PRIVATE_KEY=
+   VAPID_SUBJECT=mailto:you@yourdomain.com
+   AWS_ACCESS_KEY_ID=…       AWS_SECRET_ACCESS_KEY=…
+   AWS_BUCKET=…              AWS_ENDPOINT=https://<id>.r2.cloudflarestorage.com
+   ```
+   Coolify auto-fills the domain (`SERVICE_URL_APP` → `APP_URL`) and the MySQL
+   password (`SERVICE_PASSWORD_MYSQL`). MySQL, Redis, the queue worker and the
+   scheduler come up automatically; migrations run on boot (serversideup AUTORUN).
+3. **Deploy.** Then open `https://<your-domain>/admin` and create the admin user from
+   the Coolify **Terminal**: `php artisan db:seed` (or `tinker`).
+4. Deploying the inbound Worker: use the admin panel's **Deploy Worker** action, or
+   from the Coolify Terminal `php artisan cf:worker:sync`.
+
+That's the simplest path and fixes the "no place to add a database" problem — the DB
+and Redis are part of the compose stack.
+
+### Option B — Single Dockerfile + external managed DB
+
+Use the `Dockerfile` build pack and add MySQL (and optionally Redis) as separate
+Coolify database resources.
+
+### Step by step (Option B)
 
 1. **New Resource → Application → your Git repository.** Pick this repo and the
    branch you want to deploy.
