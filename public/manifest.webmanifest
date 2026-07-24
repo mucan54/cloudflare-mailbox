@@ -1,0 +1,14 @@
+{
+    "name": "Cloudflare Mailbox",
+    "short_name": "Mailbox",
+    "description": "Mail kutunuz — her yerden.",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#0b0f14",
+    "theme_color": "#0b0f14",
+    "icons": [
+        { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+        { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    ]
+}

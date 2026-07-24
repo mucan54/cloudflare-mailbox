@@ -1,0 +1,67 @@
+<?php
+
+namespace App\Services\Mail;
+
+use App\Models\CloudflareAccount;
+use App\Services\Cloudflare\CloudflareClient;
+use App\Services\Cloudflare\CloudflareException;
+
+/**
+ * Sends through the Cloudflare Email Sending REST API. Returns a synchronous
+ * delivered/queued/bounced result.
+ */
+class ApiMailSender implements MailSender
+{
+    public function send(CloudflareAccount $account, array $message): SendResult
+    {
+        try {
+            $result = CloudflareClient::forAccount($account)->send($this->toApiPayload($message));
+        } catch (CloudflareException $e) {
+            return SendResult::failed($e->getMessage(), ['errors' => $e->errors]);
+        }
+
+        if (! empty($result['permanent_bounces'])) {
+            return SendResult::bounced($result, 'Recipient permanently bounced');
+        }
+
+        if (! empty($result['delivered'])) {
+            return SendResult::delivered($result);
+        }
+
+        return SendResult::queued($result);
+    }
+
+    /**
+     * @param  array<string, mixed>  $message
+     * @return array<string, mixed>
+     */
+    protected function toApiPayload(array $message): array
+    {
+        $payload = array_filter([
+            'from' => $message['from'] ?? null,
+            'to' => $message['to'] ?? null,
+            'cc' => $message['cc'] ?? null,
+            'bcc' => $message['bcc'] ?? null,
+            'reply_to' => $message['reply_to'] ?? null,
+            'subject' => $message['subject'] ?? null,
+            'html' => $message['html'] ?? null,
+            'text' => $message['text'] ?? null,
+            'headers' => $message['headers'] ?? null,
+        ], fn ($v) => $v !== null && $v !== []);
+
+        if (! empty($message['attachments'])) {
+            $payload['attachments'] = array_map(function (array $a) {
+                return array_filter([
+                    'content' => isset($a['content_raw'])
+                        ? base64_encode($a['content_raw'])
+                        : ($a['content'] ?? null),
+                    'filename' => $a['filename'] ?? null,
+                    'type' => $a['type'] ?? $a['mime_type'] ?? 'application/octet-stream',
+                    'disposition' => $a['disposition'] ?? 'attachment',
+                ], fn ($v) => $v !== null);
+            }, $message['attachments']);
+        }
+
+        return $payload;
+    }
+}
