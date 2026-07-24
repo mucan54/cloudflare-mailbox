@@ -79,10 +79,20 @@ class WorkerDeployer
         $env = ['CLOUDFLARE_API_TOKEN' => $this->account->api_token];
         $bin = (string) config('cloudflare.worker.wrangler_bin', 'npx wrangler');
 
+        // Ensure the Worker's dependencies (postal-mime) are installed so wrangler
+        // can bundle the script.
+        if (! is_dir($dir.'/node_modules/postal-mime')) {
+            $install = Process::path($dir)->timeout(300)->run('npm install --no-audit --no-fund');
+            if (! $install->successful()) {
+                throw new RuntimeException('cf/ bağımlılıkları kurulamadı (npm install): '
+                    .trim($install->errorOutput() ?: $install->output()));
+            }
+        }
+
         $deploy = Process::path($dir)->env($env)->timeout(300)->run("{$bin} deploy");
 
         if (! $deploy->successful()) {
-            throw new RuntimeException('wrangler deploy başarısız: '.trim($deploy->errorOutput() ?: $deploy->output()));
+            throw new RuntimeException($this->explainFailure(trim($deploy->errorOutput()."\n".$deploy->output())));
         }
 
         // Push the per-account webhook secret (stdin, never on the CLI).
@@ -96,6 +106,22 @@ class WorkerDeployer
         ])->save();
 
         return $deploy->output();
+    }
+
+    /**
+     * Turn raw wrangler output into an actionable message.
+     */
+    protected function explainFailure(string $output): string
+    {
+        $hint = match (true) {
+            str_contains($output, 'Could not resolve') || str_contains($output, 'Build failed') => 'cf/ bağımlılıkları eksik görünüyor (postal-mime). Sunucuda `cd cf && npm install` çalıştırın veya image’ı yeniden kurun.',
+            str_contains($output, 'Authentication error') || str_contains($output, '10000') || str_contains($output, 'Unauthorized') => 'Token’ınızda “Workers Scripts: Edit” izni yok. Ayarlar’dan token’a bu izni ekleyin.',
+            str_contains($output, 'not found') && str_contains(strtolower($output), 'wrangler') => 'wrangler bulunamadı. Sunucuda Node.js + wrangler kurulu olmalı (Docker image bunu içerir).',
+            str_contains($output, 'command not found') || str_contains($output, 'npx: not found') => 'Node.js/npx sunucuda kurulu değil.',
+            default => null,
+        };
+
+        return 'wrangler deploy başarısız: '.$output.($hint ? "\n\n→ ".$hint : '');
     }
 
     protected function scriptVersion(): string
