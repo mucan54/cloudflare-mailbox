@@ -88,10 +88,16 @@ async function poll() {
     }
 }
 
+// Web Push wakes the page via a SW message → refresh instantly. Polling stays
+// as a fallback (denied notifications / no VAPID key), at a relaxed interval.
 onMounted(() => {
-    pollTimer = setInterval(poll, 20000);
+    window.addEventListener('mailbox:new-mail', poll);
+    pollTimer = setInterval(poll, 45000);
 });
-onBeforeUnmount(() => clearInterval(pollTimer));
+onBeforeUnmount(() => {
+    window.removeEventListener('mailbox:new-mail', poll);
+    clearInterval(pollTimer);
+});
 
 function open(e) {
     router.push({

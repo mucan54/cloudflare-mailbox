@@ -154,6 +154,19 @@ button { font-family: inherit; cursor: pointer; }
 }
 .add-acc:hover { border-color: var(--accent); color: var(--accent-ink); }
 
+.notif-btn {
+    margin-top: 8px;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    border: none;
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 13.5px;
+    font-weight: 600;
+}
+.notif-btn:hover { filter: brightness(1.03); }
+.notif-hint { margin: 8px 2px 0; font-size: 12px; color: var(--muted); }
+
 /* ---------- Top bar ---------- */
 .topbar {
     position: sticky;
