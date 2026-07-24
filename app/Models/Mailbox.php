@@ -35,6 +35,20 @@ class Mailbox extends Authenticatable implements AuthenticatableContract
         ];
     }
 
+    protected static function booted(): void
+    {
+        // Resolve the owning domain from the email address when not set.
+        static::saving(function (self $mailbox) {
+            if (! $mailbox->domain_id && $mailbox->email && str_contains($mailbox->email, '@')) {
+                $host = substr(strrchr($mailbox->email, '@'), 1);
+                $mailbox->domain_id = Domain::query()
+                    ->where('cloudflare_account_id', $mailbox->cloudflare_account_id)
+                    ->where('name', $host)
+                    ->value('id');
+            }
+        });
+    }
+
     public function account(): BelongsTo
     {
         return $this->belongsTo(CloudflareAccount::class, 'cloudflare_account_id');
