@@ -1,0 +1,10 @@
+.git
+node_modules
+vendor
+public/build
+storage/*.key
+database/database.sqlite
+.env
+tests
+cf/node_modules
+cf/wrangler.toml

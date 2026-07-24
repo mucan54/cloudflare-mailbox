@@ -2,8 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Widgets\SetupChecklist;
 use App\Models\CloudflareAccount;
 use App\Models\User;
+use App\Services\Cloudflare\WorkerDeployer;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -29,6 +32,35 @@ class AdminPanelSmokeTest extends TestCase
         $this->actingAs($user)
             ->get("/admin/{$account->slug}/domains")
             ->assertSuccessful();
+    }
+
+    public function test_dashboard_renders(): void
+    {
+        [$user, $account] = $this->tenantUser();
+
+        $this->actingAs($user)->get("/admin/{$account->slug}")->assertSuccessful();
+    }
+
+    public function test_setup_checklist_reflects_progress(): void
+    {
+        [$user, $account] = $this->tenantUser();
+        $this->actingAs($user);
+        Filament::setCurrentPanel('admin');
+        Filament::setTenant($account);
+
+        $widget = new SetupChecklist;
+        $items = collect($widget->getItems())->keyBy('label');
+
+        // Connected (has token+account_id) but not synced / no worker / no mailbox.
+        $this->assertTrue($items->first(fn ($i) => str_contains($i['label'], 'bağlı'))['done']);
+        $this->assertFalse($items->first(fn ($i) => str_contains($i['label'], 'senkron'))['done']);
+        $this->assertTrue(SetupChecklist::canView());
+
+        // Once fully set up, the checklist hides itself.
+        $account->domains()->create(['zone_id' => 'z1', 'name' => 'a.com']);
+        $account->mailboxes()->create(['email' => 'me@a.com', 'password' => 'x']);
+        $account->forceFill(['worker_deployed_at' => now(), 'worker_config_hash' => (new WorkerDeployer($account))->configHash()])->save();
+        $this->assertFalse(SetupChecklist::canView());
     }
 
     public function test_routing_rules_page_renders(): void
