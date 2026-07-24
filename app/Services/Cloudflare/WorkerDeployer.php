@@ -76,7 +76,12 @@ class WorkerDeployer
         $dir = (string) config('cloudflare.worker.directory');
         file_put_contents($dir.'/wrangler.toml', $this->renderWrangler());
 
-        $env = ['CLOUDFLARE_API_TOKEN' => $this->account->api_token];
+        // Pass the account id explicitly so wrangler doesn't try to look it up via
+        // the user/accounts API (which a scoped token can't read).
+        $env = [
+            'CLOUDFLARE_API_TOKEN' => $this->account->api_token,
+            'CLOUDFLARE_ACCOUNT_ID' => (string) $this->account->account_id,
+        ];
         $bin = (string) config('cloudflare.worker.wrangler_bin', 'npx wrangler');
 
         // Ensure the Worker's dependencies (postal-mime) are installed so wrangler
