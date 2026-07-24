@@ -2,13 +2,14 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { useAuth } from './stores/auth';
 
 import Login from './views/Login.vue';
-import Inbox from './views/Inbox.vue';
+import Mailbox from './views/Mailbox.vue';
 import EmailView from './views/EmailView.vue';
 import Compose from './views/Compose.vue';
 
 const routes = [
     { path: '/login', component: Login, meta: { guest: true } },
-    { path: '/', component: Inbox },
+    { path: '/', redirect: '/f/inbox' },
+    { path: '/f/:folder', component: Mailbox, props: true },
     { path: '/mail/:id', component: EmailView, props: true },
     { path: '/compose', component: Compose },
 ];
@@ -24,7 +25,7 @@ router.beforeEach((to) => {
         return '/login';
     }
     if (to.meta.guest && auth.isAuthenticated) {
-        return '/';
+        return '/f/inbox';
     }
 });
 

@@ -14,10 +14,19 @@ class InboxController extends Controller
     {
         $query = $request->user()->emails()->latest('received_at');
 
+        // Folder: inbox (default, excludes trash), starred, or trash.
+        $folder = $request->string('folder')->toString() ?: 'inbox';
+        match ($folder) {
+            'starred' => $query->where('starred', true)->where('folder', '!=', 'trash'),
+            'trash' => $query->where('folder', 'trash'),
+            default => $query->where('folder', '!=', 'trash'),
+        };
+
         if ($search = $request->string('q')->toString()) {
             $query->where(function ($q) use ($search) {
                 $q->where('subject', 'like', "%{$search}%")
                     ->orWhere('from_email', 'like', "%{$search}%")
+                    ->orWhere('from_name', 'like', "%{$search}%")
                     ->orWhere('text_body', 'like', "%{$search}%");
             });
         }
@@ -26,11 +35,7 @@ class InboxController extends Controller
             $query->whereNull('read_at');
         }
 
-        if ($request->boolean('starred')) {
-            $query->where('starred', true);
-        }
-
-        $emails = $query->paginate(min((int) $request->integer('per_page', 25), 100));
+        $emails = $query->paginate(min((int) $request->integer('per_page', 30), 100));
 
         $emails->getCollection()->transform(fn (Email $e) => $this->summary($e));
 

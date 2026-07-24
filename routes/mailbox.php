@@ -23,6 +23,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/emails/{email}', [InboxController::class, 'update']);
 
     Route::get('/sent', [SendController::class, 'index']);
+    Route::get('/sent/{sent}', [SendController::class, 'show']);
     Route::post('/send', [SendController::class, 'store']);
 
     Route::post('/push-subscribe', [PushController::class, 'subscribe']);

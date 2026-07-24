@@ -99,6 +99,62 @@ class MailboxApiTest extends TestCase
         ]);
     }
 
+    public function test_inbox_folders_filter(): void
+    {
+        $mailbox = $this->mailbox();
+        $mailbox->emails()->create(['cloudflare_account_id' => $mailbox->cloudflare_account_id, 'ingest_key' => 'k1', 'subject' => 'InboxMail', 'received_at' => now()]);
+        $mailbox->emails()->create(['cloudflare_account_id' => $mailbox->cloudflare_account_id, 'ingest_key' => 'k2', 'subject' => 'StarMail', 'starred' => true, 'received_at' => now()]);
+        $mailbox->emails()->create(['cloudflare_account_id' => $mailbox->cloudflare_account_id, 'ingest_key' => 'k3', 'subject' => 'TrashMail', 'folder' => 'trash', 'received_at' => now()]);
+
+        Sanctum::actingAs($mailbox);
+
+        $this->getJson('/api/mailbox/emails?folder=inbox')
+            ->assertOk()
+            ->assertJsonFragment(['subject' => 'InboxMail'])
+            ->assertJsonMissing(['subject' => 'TrashMail']);
+
+        $this->getJson('/api/mailbox/emails?folder=starred')
+            ->assertOk()
+            ->assertJsonFragment(['subject' => 'StarMail'])
+            ->assertJsonMissing(['subject' => 'InboxMail']);
+
+        $this->getJson('/api/mailbox/emails?folder=trash')
+            ->assertOk()
+            ->assertJsonFragment(['subject' => 'TrashMail'])
+            ->assertJsonMissing(['subject' => 'InboxMail']);
+    }
+
+    public function test_move_email_to_trash_and_star(): void
+    {
+        $mailbox = $this->mailbox();
+        $email = $mailbox->emails()->create(['cloudflare_account_id' => $mailbox->cloudflare_account_id, 'ingest_key' => 'k1', 'subject' => 'Hi', 'received_at' => now()]);
+
+        Sanctum::actingAs($mailbox);
+
+        $this->patchJson("/api/mailbox/emails/{$email->id}", ['starred' => true, 'folder' => 'trash'])
+            ->assertOk();
+
+        $this->assertDatabaseHas('emails', ['id' => $email->id, 'starred' => true, 'folder' => 'trash']);
+    }
+
+    public function test_sent_show_returns_full_body(): void
+    {
+        $mailbox = $this->mailbox();
+        $sent = $mailbox->sentEmails()->create([
+            'cloudflare_account_id' => $mailbox->cloudflare_account_id,
+            'driver' => 'api', 'from_email' => 'me@a.com', 'to' => ['x@y.com'],
+            'subject' => 'Outgoing', 'text_body' => 'Body here', 'status' => 'delivered', 'sent_at' => now(),
+        ]);
+
+        Sanctum::actingAs($mailbox);
+
+        $this->getJson("/api/mailbox/sent/{$sent->id}")
+            ->assertOk()
+            ->assertJsonPath('email.subject', 'Outgoing')
+            ->assertJsonPath('email.text_body', 'Body here')
+            ->assertJsonPath('email.to_email', 'x@y.com');
+    }
+
     public function test_push_subscribe(): void
     {
         $mailbox = $this->mailbox();
