@@ -17,11 +17,17 @@ class EmailResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedInbox;
 
-    protected static ?string $navigationLabel = 'Gelen kutusu';
-
-    protected static ?string $modelLabel = 'mail';
-
     protected static string|UnitEnum|null $navigationGroup = 'Mail';
+
+    public static function getNavigationLabel(): string
+    {
+        return __('Inbox');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('mail');
+    }
 
     protected static ?int $navigationSort = 5;
 

@@ -17,11 +17,17 @@ class DomainResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedGlobeAlt;
 
-    protected static ?string $navigationLabel = 'Domainler';
-
-    protected static ?string $modelLabel = 'domain';
-
     protected static string|UnitEnum|null $navigationGroup = 'Cloudflare';
+
+    public static function getNavigationLabel(): string
+    {
+        return __('Domains');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('domain');
+    }
 
     protected static ?int $navigationSort = 10;
 

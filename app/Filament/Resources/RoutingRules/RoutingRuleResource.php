@@ -17,11 +17,17 @@ class RoutingRuleResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowsRightLeft;
 
-    protected static ?string $navigationLabel = 'Mail adresleri (kurallar)';
-
-    protected static ?string $modelLabel = 'yönlendirme kuralı';
-
     protected static string|UnitEnum|null $navigationGroup = 'Cloudflare';
+
+    public static function getNavigationLabel(): string
+    {
+        return __('Mail addresses (rules)');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('routing rule');
+    }
 
     protected static ?int $navigationSort = 20;
 

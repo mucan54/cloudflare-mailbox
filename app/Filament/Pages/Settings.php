@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Pages\Tenancy\RegisterCloudflareAccount;
 use App\Models\CloudflareAccount;
 use App\Services\Cloudflare\CloudflareClient;
 use App\Services\Cloudflare\CloudflareException;
@@ -27,9 +28,12 @@ class Settings extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
 
-    protected static ?string $navigationLabel = 'Ayarlar';
-
     protected static string|UnitEnum|null $navigationGroup = 'Cloudflare';
+
+    public static function getNavigationLabel(): string
+    {
+        return __('Settings');
+    }
 
     protected static ?int $navigationSort = 90;
 
@@ -69,7 +73,9 @@ class Settings extends Page
                     ->helperText(new HtmlString(
                         'Mevcut token güvenlik için gösterilmez. <b>Değiştirmek için</b> yeni bir token '
                         .'yapıştırın; boş bırakırsanız mevcut token korunur.<br>'
-                        .'Gereken izinler: Account · Email Routing Addresses · Edit · | Zone · Email Routing '
+                        .'<a href="'.e(RegisterCloudflareAccount::tokenTemplateUrl()).'" target="_blank" '
+                        .'class="fi-link" style="text-decoration:underline">Cloudflare’de yeni token oluştur</a> '
+                        .'— gereken izinler: Account · Email Routing Addresses · Edit · | Zone · Email Routing '
                         .'Rules · Edit · | Account · Email Sending · Edit · | Zone · Zone · Read.'
                     )),
 

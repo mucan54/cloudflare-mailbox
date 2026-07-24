@@ -18,6 +18,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // X-Forwarded-* headers so Laravel knows requests are HTTPS.
         $middleware->trustProxies(at: '*');
 
+        // Apply the per-session UI locale.
+        $middleware->web(append: [
+            \App\Http\Middleware\SetLocale::class,
+        ]);
+
         // The Cloudflare Email Worker posts here with its own HMAC signature.
         $middleware->validateCsrfTokens(except: [
             'api/cf/*',
