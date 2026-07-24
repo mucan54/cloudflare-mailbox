@@ -53,7 +53,12 @@ altında birleştirdi. İki yönü vardır:
 kapsama modeliyle birebir örtüşür. Filament v5'in **yerleşik tenancy** desteği
 kullanılır: tüm kaynaklar (domain, kural, adres, inbox, giden) aktif tenant'a
 scope'lanır, panelde tenant switcher bulunur, kullanıcılar hesaplara pivot tablo
-ile üye olur. Ayrıntı: [§8.1](#81-multi-tenancy-filament).
+ile üye olur. Ayrıntı: [§8.2](#82-multi-tenancy-filament).
+
+**İki kimlik yüzeyi:** Ayrıca son kullanıcılar için **mailbox portalı** vardır —
+kök `/` adresinden email + şifre ile giriş yapılır, kullanıcı yalnız kendi mail
+kutusunu kullanır (tenancy'den bağımsız, çünkü mail adresi global benzersizdir).
+Yöneticiler `/admin` tenancy'li panele girer. Ayrıntı: [§8.1](#81-paneller--kimlik-yüzeyleri).
 
 ---
 
@@ -273,14 +278,27 @@ sürücüde de çalışacak şekilde portatif yazılır (bkz. [§11](#11-test--c
   timestamps`
 - **routing_rules** — `id, domain_id, cf_id, name, matcher (local part),
   actions (json: forward/worker/drop), enabled, priority, is_catch_all, timestamps`
-- **emails** (inbox) — `id, cloudflare_account_id, domain_id, message_id,
-  in_reply_to, references (json), from_name, from_email, to_email, cc (json),
-  subject, text_body, html_body, headers (json), raw_size, read_at, starred,
-  folder, received_at, timestamps` (+ portatif arama; bkz. §11)
-- **sent_emails** — `id, cloudflare_account_id, domain_id, driver (api|smtp),
-  from_email, to (json), cc (json), bcc (json), subject, html_body, text_body,
-  status (queued/delivered/bounced/failed), cf_response (json), error, sent_at,
-  in_reply_to_email_id (null), timestamps`
+- **mailboxes** *(Authenticatable — mailbox portal girişi)* —
+  `id, cloudflare_account_id, domain_id, email (unique, global), display_name,
+  password (hashed, nullable), login_enabled (bool), last_login_at,
+  remember_token, timestamps`
+  - Admin panelinden oluşturulur; şifre admin tarafından atanır/sıfırlanır.
+  - `email` **global benzersiz** (login tenant'tan bağımsız); veri yine
+    `cloudflare_account_id`/`domain_id` altında durur.
+  - Not: gerçekten mail alması için ilgili adreste "Send to Worker" routing kuralı
+    olmalı (mailbox oluştururken garanti edilir).
+- **emails** (inbox) — `id, cloudflare_account_id, domain_id, mailbox_id (nullable),
+  message_id, in_reply_to, references (json), from_name, from_email, to_email,
+  cc (json), subject, text_body, html_body, headers (json), raw_size, read_at,
+  starred, folder, received_at, timestamps` (+ portatif arama; bkz. §11)
+  - `mailbox_id`, webhook ingest'te `to_email` → mailbox eşlemesiyle doldurulur;
+    mailbox portalı yalnız kendi `mailbox_id`'sini görür.
+- **sent_emails** — `id, cloudflare_account_id, domain_id, mailbox_id (nullable),
+  driver (api|smtp), from_email, to (json), cc (json), bcc (json), subject,
+  html_body, text_body, status (queued/delivered/bounced/failed),
+  cf_response (json), error, sent_at, in_reply_to_email_id (null), timestamps`
+  - `mailbox_id`: gönderim mailbox portalından yapıldıysa dolar (admin
+    gönderimlerinde null).
 - **attachments** — `id, attachable_type/id (email|sent_email), filename, mime_type,
   size, storage_disk, storage_path (R2/local), content_id, inline (bool), timestamps`
 
@@ -358,7 +376,24 @@ kullanılır; sadece `endpoint`/bölge değişir):
 
 ## 8. Filament arayüz yapısı
 
-### 8.1 Multi-tenancy (Filament)
+### 8.1 Paneller & kimlik yüzeyleri
+
+Uygulamanın **iki ayrı Filament paneli** ve **iki ayrı auth guard**'ı vardır:
+
+| Panel | Yol | Guard / provider | Kimler | Kapsam |
+|-------|-----|------------------|--------|--------|
+| **Mailbox portalı** | `/` (kök) | `mailbox` guard → `mailboxes` tablosu | Son kullanıcı (tek mail adresi) | Sadece kendi gelen kutusu + kendi adresinden compose; tenancy YOK, switcher YOK |
+| **Admin panel** | `/admin` | `web` guard → `users` tablosu | Yönetici | Domain/kural/adres/gönderim yönetimi, tüm mailbox'lar; **tenancy'li** (tenant switcher) |
+
+- **Kök (`/`) mailbox girişi:** kullanıcı email + şifre girer → global benzersiz
+  `email` ile `mailboxes` çözülür → doğrudan o mailbox'a düşer. Tenant seçmez,
+  admin panelini göremez.
+- **`/admin` yöneticiler için:** Filament tenancy'li panel (aşağıda §8.2). Farklı
+  guard olduğundan mailbox girişi asla admin paneline erişemez, tam tersi de.
+- İki panel Filament bileşenlerini paylaşır (InboxResource/Compose yeniden
+  kullanılır), yalnız scope ve guard farklıdır.
+
+### 8.2 Multi-tenancy (Filament)
 
 - **Tenant modeli:** `CloudflareAccount`. `AdminPanelProvider`'da
   `->tenant(CloudflareAccount::class, slugAttribute: 'slug')` ile etkinleştirilir.
@@ -377,7 +412,7 @@ kullanılır; sadece `endpoint`/bölge değişir):
 - **URL yapısı:** `/{tenant-slug}/domains`, `/{tenant-slug}/inbox` … Böylece
   Cloudflare'in account-scoped modeliyle birebir aynı zihinsel model korunur.
 
-### 8.2 Kaynaklar & sayfalar
+### 8.3 Admin panel kaynakları & sayfaları
 
 `app/Filament/Resources/` ve `Pages/`, `Widgets/`:
 
@@ -387,6 +422,9 @@ kullanılır; sadece `endpoint`/bölge değişir):
   create/edit/delete/toggle; domain filtresi; catch-all yönetimi.
 - **DestinationAddressResource** — hesap seviyesi hedefler; ekle, doğrulama durumu,
   "doğrulama mailini tekrar gönder".
+- **MailboxResource** — mailbox portalı hesapları: email seç (domain'e ait bir
+  adres), şifre ata/sıfırla, `login_enabled` aç/kapa, son giriş; oluştururken
+  ilgili adres için "Send to Worker" routing kuralını garanti etme aksiyonu.
 - **InboxResource** — gelen kutusu: liste (okundu/okunmadı, yıldız, domain/klasör
   filtresi, arama), görüntüleme sayfası (HTML güvenli render + ek indirme),
   "Yanıtla / İlet" aksiyonları, thread görünümü.
@@ -402,6 +440,19 @@ kullanılır; sadece `endpoint`/bölge değişir):
 
 Yetkilendirme: Filament auth + **tenant üyeliği** (pivot `role`: owner/member).
 Tenant içi ince rol/izin gerekirse `bezhanSalleh/filament-shield` eklenir.
+
+### 8.4 Mailbox portalı (kök panel) içeriği
+
+`app/Filament/Mailbox/` (ayrı panel, `mailbox` guard). Tümü aktif mailbox'ın
+`mailbox_id`'sine scope'lu:
+
+- **Inbox** — sadece kendi gelen kutusu; okundu/yıldız, arama, güvenli HTML görüntüleme,
+  ek indirme, **Yanıtla/İlet**.
+- **Compose** — `from` kendi adresine kilitli; to/cc/bcc/konu/HTML/ek (≤5 MiB) → Faz 2
+  giden akışına bağlanır.
+- **Sent** — sadece kendi gönderdikleri.
+- **Hesap** — şifre değiştir (opsiyonel; admin de sıfırlayabilir).
+- Domain/kural/adres yönetimi ve tenant switcher **YOK**.
 
 ---
 
@@ -446,6 +497,11 @@ Tenant içi ince rol/izin gerekirse `bezhanSalleh/filament-shield` eklenir.
 - **Ek dosyalar:** doğrudan public değil; imzalı geçici URL ile indirilir.
 - **Domain doğrulama:** SPF/DKIM/DMARC "verified" değilse giden mailde uyarı.
 - Filament paneli auth zorunlu; prod'da 2FA önerilir.
+- **Mailbox portalı izolasyonu:** `mailbox` guard'ı `web` (admin) guard'ından
+  tamamen ayrıdır; mailbox girişi admin paneline **erişemez**. Şifreler `bcrypt`
+  ile hash'lenir, admin atar/sıfırlar; login rate-limit'li; `login_enabled=false`
+  ise giriş kapalı. Mailbox portalındaki tüm sorgular `mailbox_id` ile zorunlu
+  scope'ludur (global scope ile sızıntı engellenir).
 
 ---
 
@@ -525,7 +581,18 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
   okundu/yıldız, **Yanıtla/İlet** (Faz 2 giden akışına bağlanır).
 - **Çıktı:** gelen mailler arayüzde görüntüleniyor, yanıtlanıyor — tam mail servisi.
 
-### Faz 5 — Cila & üretim
+### Faz 5 — Mailbox portalı (son kullanıcı girişi)
+- Migration+Model: `mailboxes` (Authenticatable, hash'li şifre); `emails`/`sent_emails`
+  tablolarına `mailbox_id`; webhook ingest'te `to_email → mailbox_id` çözümü.
+- `mailbox` auth guard + provider; login rate-limit.
+- Admin panelinde **MailboxResource** (email seç, şifre ata/sıfırla, `login_enabled`,
+  "Send to Worker kuralını garanti et").
+- **İkinci Filament paneli** kök `/` yolunda (`mailbox` guard, tenancy yok):
+  Inbox + Compose + Sent + Hesap; hepsi `mailbox_id`'ye scope'lu.
+- **Çıktı:** kullanıcı `/` üzerinden email+şifre ile girip yalnız kendi mailbox'ını
+  kullanıyor; admin `/admin` tenancy'li panelde. İki yüzey tamamen izole.
+
+### Faz 6 — Cila & üretim
 - Dashboard widget'ları (teslim/bounce/okunmamış/domain sağlık).
 - HTML sanitizasyon + CSP iframe render sağlamlaştırma.
 - Redis + Horizon; queue izleme.
@@ -548,7 +615,11 @@ Her faz bağımsız test edilebilir ve commit'lenebilir çıktı üretir.
 - ✅ **Reply stratejisi:** **Send API ile** yanıt; Worker `reply()` (DMARC/tek-yanıt
   kısıtları) kullanılmayacak.
 - ✅ **Spam/filtre:** Şimdilik **kapsam dışı** (ileride Worker tarafında eklenebilir).
+- ✅ **İki kimlik yüzeyi & panel:** Kök `/` = **mailbox portalı** (`mailbox` guard,
+  email+şifre, tek mailbox, tenancy'siz); `/admin` = **tenancy'li admin paneli**
+  (`web` guard). `mailboxes` tablosu Authenticatable; şifreyi admin atar. İki panel
+  ayrı guard'larla tamamen izole (Faz 5).
 
 ### Sonraki adım
 Faz 0'dan (config + Filament tenancy + `CloudflareAccount` modeli + bağlantı testi)
-koda başlamaya hazır.
+koda başlamaya hazır. Mailbox portalı Faz 5'te gelir (Inbox/Compose'a bağımlı).
