@@ -30,7 +30,7 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
-            ->tenant(CloudflareAccount::class, slugAttribute: 'slug')
+            ->tenant(CloudflareAccount::class, slugAttribute: 'slug', ownershipRelationship: 'account')
             ->tenantRegistration(RegisterCloudflareAccount::class)
             ->tenantMenu()
             ->colors([
