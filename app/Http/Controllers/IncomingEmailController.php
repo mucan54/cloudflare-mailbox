@@ -7,6 +7,7 @@ use App\Models\CloudflareAccount;
 use App\Services\Cloudflare\WebhookSignature;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Receives parsed inbound emails from the Cloudflare Email Worker.
@@ -21,12 +22,16 @@ class IncomingEmailController extends Controller
         $timestamp = $request->header('X-CF-Timestamp');
 
         if (! $accountId || ! $signature || ! $timestamp) {
+            Log::warning('cf webhook rejected: missing signature headers', ['account' => $accountId]);
+
             return response()->json(['error' => 'missing signature headers'], 400);
         }
 
         $account = CloudflareAccount::where('account_id', $accountId)->first();
 
         if (! $account || ! $account->webhook_secret) {
+            Log::warning('cf webhook rejected: unknown account or no secret', ['account' => $accountId]);
+
             return response()->json(['error' => 'unknown account'], 401);
         }
 
@@ -39,6 +44,11 @@ class IncomingEmailController extends Controller
         );
 
         if (! $valid) {
+            Log::warning('cf webhook rejected: invalid signature', [
+                'account' => $accountId,
+                'hint' => 'Worker WEBHOOK_SECRET may not match the stored webhook_secret — redeploy the worker.',
+            ]);
+
             return response()->json(['error' => 'invalid signature'], 401);
         }
 

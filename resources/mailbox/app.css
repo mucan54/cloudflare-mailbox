@@ -194,6 +194,21 @@ button { font-family: inherit; cursor: pointer; }
 }
 .searchbar input:focus { border-color: var(--accent); background: #fff; }
 
+/* ---------- New-mail banner ---------- */
+.new-mail {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    width: 100%;
+    border: none;
+    background: var(--accent);
+    color: #1f2937;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 8px;
+    cursor: pointer;
+}
+
 /* ---------- List ---------- */
 .list { flex: 1; }
 .empty { padding: 48px 20px; text-align: center; color: var(--muted); }

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, provide, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuth, UNIFIED } from './stores/auth';
 import { enablePush } from './push';
@@ -53,12 +53,31 @@ function initials(acc) {
     return s.trim().charAt(0).toUpperCase();
 }
 
+// Keep the sidebar unread badges (and the browser tab title) live without a
+// manual refresh by polling the per-account unread counts.
+let unreadTimer = null;
+
+watch(
+    () => auth.totalUnread,
+    (n) => {
+        document.title = n > 0 ? `(${n}) Mailbox` : 'Mailbox';
+    },
+    { immediate: true },
+);
+
 onMounted(async () => {
     if (auth.isAuthenticated) {
         auth.refreshUnread().catch(() => {});
         enablePush().catch(() => {});
+        unreadTimer = setInterval(() => {
+            if (auth.isAuthenticated && document.visibilityState === 'visible') {
+                auth.refreshUnread().catch(() => {});
+            }
+        }, 30000);
     }
 });
+
+onBeforeUnmount(() => clearInterval(unreadTimer));
 </script>
 
 <template>
