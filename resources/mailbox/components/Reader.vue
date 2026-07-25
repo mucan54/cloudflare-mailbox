@@ -140,6 +140,12 @@ defineExpose({ reply, toggleStar, trash, markUnread });
                 <div class="rd-when">{{ fmt(email.received_at) }}</div>
             </div>
 
+            <div v-if="!isSent && email.to_email" class="rd-to">
+                <span class="rd-to-lbl">{{ t('mail.toShort') }}</span>
+                <span class="rd-to-val">{{ email.to_email }}</span>
+                <span v-if="email.cc?.length" class="rd-to-cc">· Cc {{ email.cc.join(', ') }}</span>
+            </div>
+
             <div v-if="email.html_body" class="rd-body" v-html="email.html_body" />
             <pre v-else class="rd-body text">{{ email.text_body }}</pre>
 

@@ -12,7 +12,7 @@ export default {
     mail: {
         greeting: 'Merhaba 👋', searchPlaceholder: 'Mail içinde ara', searchTop: 'Ara  ( / )',
         empty: 'Bu klasör boş.', noMatch: 'Eşleşen ileti yok.', noSubject: '(konu yok)', noRecipient: '(alıcı yok)',
-        to: 'Kime: {v}', reply: 'Yanıtla', replyAll: 'Tümünü yanıtla', forward: 'İlet', markUnread: 'Okunmadı yap',
+        to: 'Kime: {v}', toShort: 'Kime', reply: 'Yanıtla', replyAll: 'Tümünü yanıtla', forward: 'İlet', markUnread: 'Okunmadı yap',
         star: 'Yıldızla', selected: '{n} seçili', movedToTrash: 'İleti çöp kutusuna taşındı', restored: 'İleti geri alındı',
         movedN: '{n} ileti taşındı', newMail: '{n} yeni ileti ↑', selectToRead: 'Okumak için bir ileti seçin',
         selectSub: 'Soldaki listeden bir öğe seçin veya', composeLink: 'yeni ileti yazın', attachments: 'Ekler',
