@@ -2,8 +2,12 @@
 
 namespace App\Filament\Resources\SentEmails\Tables;
 
+use App\Models\SentEmail;
+use Filament\Actions\Action;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Contracts\View\View;
 
 class SentEmailsTable
 {
@@ -28,7 +32,7 @@ class SentEmailsTable
 
                 TextColumn::make('subject')
                     ->label('Konu')
-                    ->limit(50)
+                    ->limit(40)
                     ->searchable(),
 
                 TextColumn::make('driver')
@@ -45,6 +49,34 @@ class SentEmailsTable
                         'failed' => 'danger',
                         default => 'gray',
                     }),
+
+                TextColumn::make('error')
+                    ->label('Sebep / hata')
+                    ->placeholder('—')
+                    ->limit(48)
+                    ->tooltip(fn (?string $state) => $state)
+                    ->toggleable()
+                    ->color('danger'),
+            ])
+            ->filters([
+                SelectFilter::make('status')
+                    ->label('Durum')
+                    ->options([
+                        'delivered' => 'Teslim edildi',
+                        'queued' => 'Kuyrukta (gönderildi)',
+                        'bounced' => 'Geri döndü',
+                        'failed' => 'Başarısız',
+                    ]),
+            ])
+            ->recordActions([
+                Action::make('detay')
+                    ->label('Detay')
+                    ->icon('heroicon-o-eye')
+                    ->color('gray')
+                    ->modalHeading(fn (SentEmail $record) => $record->subject ?: '(konu yok)')
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Kapat')
+                    ->modalContent(fn (SentEmail $record): View => view('filament.sent-detail', ['s' => $record])),
             ])
             ->defaultSort('sent_at', 'desc');
     }

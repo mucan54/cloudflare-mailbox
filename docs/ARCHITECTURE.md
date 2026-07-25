@@ -743,8 +743,11 @@ tümü aktif mailbox'ın `mailbox_id`'sine zorunlu scope'lu.
 - **Tetikleyici:** `StoreIncomingEmail` yeni mail yazınca ilgili mailbox'a
   `IncomingMailNotification` (WebPushChannel, `ShouldQueue`) → "Yeni mailin var"
   push'u; tıklanınca ilgili mail açılır.
-- **VAPID:** anahtarlar `.env`'de (`webpush:generate`); public key SPA'ya endpoint/env
-  ile verilir (JS'e hardcode edilmez).
+- **VAPID:** anahtarlar `.env`'de (`php artisan webpush:vapid --show`); public key SPA'ya
+  endpoint/env ile verilir (JS'e hardcode edilmez). **`VAPID_SUBJECT` bir `mailto:` ya da
+  `https://` URL olmalı** — push servisleri (özellikle iOS) `mailbox` gibi düz bir değeri
+  reddeder ve bildirim gelmez. Boş bırakılırsa `APP_URL`'e düşer; `config/webpush.php`
+  e-posta benzeri bir değeri `mailto:<email>`'e normalize eder, aksi halde `APP_URL`'e düşer.
 - **iOS gerçeği (kritik):** iOS'ta Web Push **yalnız** kullanıcı PWA'yı **Ana Ekrana
   eklerse** (Share → Add to Home Screen), **iOS 16.4+** ve **kullanıcı hareketiyle**
   çalışır. Normal Safari sekmesinde push YOK. SPA iOS'ta önce "Ana ekrana ekle"

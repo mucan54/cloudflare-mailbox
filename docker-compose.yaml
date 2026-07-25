@@ -43,6 +43,7 @@ x-app-env: &app-env
   # push (php artisan webpush:vapid --show) and set both — they must stay stable.
   VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
   VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+  # Must be a mailto: or https:// URL (iOS rejects bare values). Defaults to the app URL.
   VAPID_SUBJECT: ${VAPID_SUBJECT:-${SERVICE_URL_APP}}
 
   CLOUDFLARE_SEND_DRIVER: ${CLOUDFLARE_SEND_DRIVER:-api}
