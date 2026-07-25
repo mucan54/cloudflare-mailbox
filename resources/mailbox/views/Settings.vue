@@ -42,8 +42,10 @@ async function saveProfile() {
 
 // ----- push notifications health check -----
 const testBusy = ref(false);
+const testError = ref('');
 async function testPush() {
     testBusy.value = true;
+    testError.value = '';
     try {
         const perm = notificationPermission();
         if (perm === 'default') {
@@ -58,8 +60,9 @@ async function testPush() {
         const { data } = await auth.api(email.value).post('/push-test');
         if (data.reason === 'no_subscriptions') ui.toast(t('profile.testNoSub'));
         else if (data.reason === 'vapid_not_configured') ui.toast(t('profile.testNoVapid'));
+        else if (data.reason === 'exception') { testError.value = data.message; ui.toast(t('profile.testFailed')); }
         else if (data.sent > 0) ui.toast(t('profile.testSent', { n: data.sent }));
-        else ui.toast(t('profile.testFailed'));
+        else { testError.value = (data.errors && data.errors.join(' · ')) || ''; ui.toast(t('profile.testFailed')); }
     } catch (_) {
         ui.toast(t('profile.testFailed'));
     } finally {
@@ -124,6 +127,7 @@ async function changePassword() {
                 <div class="settings-actions">
                     <button class="btn ghost" :disabled="testBusy" @click="testPush">{{ testBusy ? '…' : t('profile.testPush') }}</button>
                 </div>
+                <p v-if="testError" class="error" style="margin-top:8px; word-break:break-word">{{ testError }}</p>
             </section>
 
             <section class="card">

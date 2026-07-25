@@ -89,21 +89,33 @@ class PushController extends Controller
         $pruned = 0;
         $errors = [];
 
-        foreach ($webPush->flush() as $report) {
-            if ($report->isSuccess()) {
-                $sent++;
+        try {
+            foreach ($webPush->flush() as $report) {
+                if ($report->isSuccess()) {
+                    $sent++;
 
-                continue;
+                    continue;
+                }
+
+                $failed++;
+                $status = $report->getResponse()?->getStatusCode();
+                $errors[] = trim(($status ? $status.' ' : '').$report->getReason());
+
+                // Drop endpoints the push service has retired so future sends skip them.
+                if ($report->isSubscriptionExpired()) {
+                    $mailbox->pushSubscriptions()->where('endpoint', $report->getEndpoint())->delete();
+                    $pruned++;
+                }
             }
-
-            $failed++;
-            $errors[] = $report->getReason();
-
-            // Drop endpoints the push service has retired so future sends skip them.
-            if ($report->isSubscriptionExpired()) {
-                $mailbox->pushSubscriptions()->where('endpoint', $report->getEndpoint())->delete();
-                $pruned++;
-            }
+        } catch (\Throwable $e) {
+            // VAPID signing / encryption blows up here (e.g. a malformed key)
+            // — return the reason instead of a 500 so the user can see it.
+            return response()->json([
+                'sent' => 0,
+                'failed' => $subs->count(),
+                'reason' => 'exception',
+                'message' => $e->getMessage(),
+            ], 200);
         }
 
         return response()->json([
