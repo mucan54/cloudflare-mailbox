@@ -66,7 +66,10 @@ async function subscribeForAccounts(accounts) {
     }
 
     const json = sub.toJSON();
-    const body = { endpoint: sub.endpoint, keys: json.keys, contentEncoding: 'aesgcm' };
+    // Must be aes128gcm (RFC 8291): Apple's iOS/Safari Web Push ONLY supports
+    // this encoding and silently drops legacy "aesgcm" pushes — the reason
+    // notifications never arrived on iOS. All current browsers support it.
+    const body = { endpoint: sub.endpoint, keys: json.keys, contentEncoding: 'aes128gcm' };
 
     // Register the same endpoint under each account so any inbox can notify.
     await Promise.all(

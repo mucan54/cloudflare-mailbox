@@ -278,9 +278,14 @@ class MailboxApiTest extends TestCase
         $this->postJson('/api/mailbox/push-subscribe', [
             'endpoint' => 'https://push.example/abc',
             'keys' => ['p256dh' => 'key', 'auth' => 'auth'],
+            'contentEncoding' => 'aes128gcm',
         ])->assertOk();
 
-        $this->assertDatabaseHas('push_subscriptions', ['endpoint' => 'https://push.example/abc']);
+        // Must be aes128gcm, not the legacy aesgcm that iOS silently drops.
+        $this->assertDatabaseHas('push_subscriptions', [
+            'endpoint' => 'https://push.example/abc',
+            'content_encoding' => 'aes128gcm',
+        ]);
     }
 
     public function test_push_test_reports_no_subscriptions(): void

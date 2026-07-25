@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Mailbox;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Minishlink\WebPush\ContentEncoding;
 use Minishlink\WebPush\Subscription;
 use Minishlink\WebPush\WebPush;
 
@@ -69,14 +70,16 @@ class PushController extends Controller
             'title' => 'Test bildirimi ✅',
             'body' => 'Bildirimler bu cihazda çalışıyor.',
             'icon' => '/icons/icon-192.png',
-            'badge' => '/icons/badge.png',
+            'badge' => '/icons/icon-192.png',
             'tag' => 'push-test',
             'data' => ['url' => '/f/inbox'],
         ]);
 
         foreach ($subs as $sub) {
             $webPush->queueNotification(
-                new Subscription($sub->endpoint, $sub->public_key, $sub->auth_token, $sub->content_encoding),
+                // Fall back to aes128gcm (iOS-compatible) when unset — the
+                // library's own Subscription default is the legacy aesgcm.
+                new Subscription($sub->endpoint, $sub->public_key, $sub->auth_token, $sub->content_encoding ?? ContentEncoding::aes128gcm),
                 $payload,
             );
         }
