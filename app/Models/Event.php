@@ -7,11 +7,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Event extends Model
 {
-    protected $fillable = ['mailbox_id', 'title', 'location', 'starts_at', 'ends_at', 'all_day', 'notes', 'color'];
+    protected $fillable = ['mailbox_id', 'source_uid', 'title', 'location', 'starts_at', 'ends_at', 'all_day', 'notes', 'color', 'reminded_at'];
 
     protected function casts(): array
     {
-        return ['starts_at' => 'datetime', 'ends_at' => 'datetime', 'all_day' => 'boolean'];
+        return ['starts_at' => 'datetime', 'ends_at' => 'datetime', 'all_day' => 'boolean', 'reminded_at' => 'datetime'];
     }
 
     public function mailbox(): BelongsTo
