@@ -83,6 +83,7 @@ class InboxController extends Controller
             'snippet' => Str::limit(strip_tags((string) ($e->text_body ?: $e->html_body)), 140),
             'read' => $e->read_at !== null,
             'starred' => $e->starred,
+            'folder' => $e->folder,
             'received_at' => $e->received_at?->toIso8601String(),
         ];
     }

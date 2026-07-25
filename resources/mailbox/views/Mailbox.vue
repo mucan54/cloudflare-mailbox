@@ -2,18 +2,24 @@
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '../stores/auth';
+import { useUi } from '../stores/ui';
 import { initials, avatarColor } from '../avatar';
 import { pushSupported, notificationPermission, requestAndSubscribe, vapidKey } from '../push';
+import { useIsDesktop } from '../useMedia';
+import Reader from '../components/Reader.vue';
 
 const props = defineProps({ folder: { type: String, default: 'inbox' } });
 const auth = useAuth();
+const ui = useUi();
 const router = useRouter();
 const accountSheet = inject('accountSheet');
+const isDesktop = useIsDesktop();
 
 const emails = ref([]);
 const loading = ref(true);
-const search = ref('');
 const newCount = ref(0);
+const onlyUnread = ref(false);
+const checked = ref(new Set());
 let searchTimer = null;
 let pollTimer = null;
 
@@ -25,10 +31,16 @@ const refreshing = ref(false);
 const isPulling = ref(false);
 let ptrStartY = 0;
 
+// Reading pane (desktop)
+const selectedId = ref(null);
+const selectedAcc = ref('');
+const cursor = ref(-1);
+
 const titles = { inbox: 'Gelen kutusu', starred: 'Yıldızlı', sent: 'Gönderilenler', trash: 'Çöp kutusu' };
 const title = computed(() => titles[props.folder] || 'Gelen kutusu');
 const isSent = computed(() => props.folder === 'sent');
 const isTrash = computed(() => props.folder === 'trash');
+const paneMode = computed(() => isDesktop.value && ui.readingPane !== 'off');
 const greetName = computed(() => auth.current?.display_name || auth.current?.email?.split('@')[0] || '');
 const headerAvatar = computed(() => {
     if (auth.isUnified) return { text: '∀', color: '#111827' };
@@ -40,13 +52,15 @@ function keyOf(e) {
     return e._account + ':' + e.id;
 }
 
+const visible = computed(() => (onlyUnread.value && !isSent.value ? emails.value.filter((e) => !e.read) : emails.value));
+
 async function fetchAll() {
     const scope = auth.scope();
     const path = isSent.value ? '/sent' : '/emails';
     const batches = await Promise.all(
         scope.map(async (acc) => {
             const params = isSent.value ? {} : { folder: props.folder };
-            if (search.value) params.q = search.value;
+            if (ui.search) params.q = ui.search;
             const { data } = await auth.api(acc.email).get(path, { params });
             return (data.data ?? []).map((e) => ({ ...e, _account: acc.email }));
         }),
@@ -67,26 +81,22 @@ async function load() {
 }
 
 async function poll() {
-    if (search.value || document.visibilityState !== 'visible') return;
+    if (ui.search || document.visibilityState !== 'visible') return;
     try {
         const fresh = await fetchAll();
         const seen = new Set(emails.value.map(keyOf));
         const additions = fresh.filter((e) => !seen.has(keyOf(e)));
         if (additions.length) {
-            emails.value = [...additions, ...emails.value].sort(
-                (a, b) => new Date(b.received_at || 0) - new Date(a.received_at || 0),
-            );
+            emails.value = [...additions, ...emails.value].sort((a, b) => new Date(b.received_at || 0) - new Date(a.received_at || 0));
             if (!isSent.value) {
                 newCount.value += additions.length;
                 auth.refreshUnread();
             }
         }
-    } catch (_) {
-        // ignore transient poll failures
-    }
+    } catch (_) { /* ignore */ }
 }
 
-// ----- grouping by day -----
+// ----- grouping -----
 function dayLabel(iso) {
     if (!iso) return '';
     const d = new Date(iso);
@@ -98,11 +108,10 @@ function dayLabel(iso) {
     if (d >= y0) return 'Dün';
     return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
 }
-
 const groups = computed(() => {
     const out = [];
     let cur = null;
-    for (const e of emails.value) {
+    for (const e of visible.value) {
         const label = dayLabel(e.received_at);
         if (!cur || cur.label !== label) {
             cur = { label, items: [] };
@@ -114,8 +123,7 @@ const groups = computed(() => {
 });
 
 function who(e) {
-    if (isSent.value) return e.to_email || '(alıcı yok)';
-    return e.from_name || e.from_email;
+    return isSent.value ? (e.to_email || '(alıcı yok)') : (e.from_name || e.from_email);
 }
 function avatarSeed(e) {
     return isSent.value ? (e.to_email || '') : (e.from_email || '');
@@ -129,9 +137,17 @@ function fmt(iso) {
 }
 
 function open(e) {
-    router.push({ path: `/mail/${e.id}`, query: { acc: e._account, type: isSent.value ? 'sent' : 'received' } });
+    cursor.value = visible.value.indexOf(e);
+    if (paneMode.value) {
+        selectedId.value = e.id;
+        selectedAcc.value = e._account;
+        e.read = true;
+    } else {
+        router.push({ path: `/mail/${e.id}`, query: { acc: e._account, type: isSent.value ? 'sent' : 'received' } });
+    }
 }
 
+// ----- per-row + bulk actions -----
 async function toggleStar(e) {
     e.starred = !e.starred;
     try {
@@ -141,39 +157,78 @@ async function toggleStar(e) {
     }
     if (props.folder === 'starred' && !e.starred) emails.value = emails.value.filter((x) => x !== e);
 }
-
 async function trash(e) {
+    const from = e.folder || (isTrash.value ? 'trash' : 'inbox');
     const target = isTrash.value ? 'inbox' : 'trash';
     emails.value = emails.value.filter((x) => x !== e);
+    if (selectedId.value === e.id) selectedId.value = null;
     try {
         await auth.api(e._account).patch(`/emails/${e.id}`, { folder: target });
+        auth.refreshUnread();
     } catch (_) {
         load();
+        return;
+    }
+    ui.toast(isTrash.value ? 'İleti geri alındı' : 'İleti çöp kutusuna taşındı', async () => {
+        await auth.api(e._account).patch(`/emails/${e.id}`, { folder: from }).catch(() => {});
+        auth.refreshUnread();
+        load();
+    });
+}
+async function toggleRead(e) {
+    e.read = !e.read;
+    try {
+        await auth.api(e._account).patch(`/emails/${e.id}`, { read: e.read });
+        auth.refreshUnread();
+    } catch (_) {
+        e.read = !e.read;
     }
 }
 
-// Discoverable notification prompt (inbox only).
-const notifState = ref(notificationPermission());
-const notifDismissed = ref(sessionStorage.getItem('notif_dismissed') === '1');
-const showNotifBanner = computed(
-    () => props.folder === 'inbox' && pushSupported() && !!vapidKey() && notifState.value === 'default' && !notifDismissed.value,
-);
-async function enableNotif() {
-    await requestAndSubscribe(auth.accounts);
-    notifState.value = notificationPermission();
+// bulk
+const checkedList = computed(() => emails.value.filter((e) => checked.value.has(keyOf(e))));
+function toggleCheck(e) {
+    const k = keyOf(e);
+    const s = new Set(checked.value);
+    s.has(k) ? s.delete(k) : s.add(k);
+    checked.value = s;
 }
-function dismissNotif() {
-    notifDismissed.value = true;
-    sessionStorage.setItem('notif_dismissed', '1');
+function clearChecks() {
+    checked.value = new Set();
+}
+async function bulkRead(read) {
+    const items = checkedList.value;
+    await Promise.all(items.map((e) => {
+        e.read = read;
+        return auth.api(e._account).patch(`/emails/${e.id}`, { read }).catch(() => {});
+    }));
+    auth.refreshUnread();
+    clearChecks();
+}
+async function bulkTrash() {
+    const items = checkedList.value.map((e) => ({ e, from: e.folder || 'inbox' }));
+    const keys = new Set(items.map((x) => keyOf(x.e)));
+    emails.value = emails.value.filter((e) => !keys.has(keyOf(e)));
+    clearChecks();
+    await Promise.all(items.map(({ e }) => auth.api(e._account).patch(`/emails/${e.id}`, { folder: isTrash.value ? 'inbox' : 'trash' }).catch(() => {})));
+    auth.refreshUnread();
+    ui.toast(`${items.length} ileti taşındı`, async () => {
+        await Promise.all(items.map(({ e, from }) => auth.api(e._account).patch(`/emails/${e.id}`, { folder: from }).catch(() => {})));
+        auth.refreshUnread();
+        load();
+    });
+}
+async function bulkStar() {
+    await Promise.all(checkedList.value.map((e) => {
+        e.starred = true;
+        return auth.api(e._account).patch(`/emails/${e.id}`, { starred: true }).catch(() => {});
+    }));
+    clearChecks();
 }
 
 // ----- pull-to-refresh (tap-safe) -----
-// A pull is only "committed" after a clear downward drag past COMMIT px. Below
-// that we never call preventDefault, so normal taps (open email) fire on the
-// first tap and vertical scrolling is untouched.
 const PTR_COMMIT = 14;
 let ptrCandidate = false;
-
 function atTop() {
     const winTop = window.scrollY || document.documentElement.scrollTop || 0;
     const listTop = listEl.value ? listEl.value.scrollTop : 0;
@@ -188,13 +243,13 @@ function ptrStart(e) {
 function ptrMove(e) {
     if (!ptrCandidate) return;
     const dy = e.touches[0].clientY - ptrStartY;
-    if (dy < PTR_COMMIT) return; // still a tap / not enough pull — leave it alone
+    if (dy < PTR_COMMIT) return;
     if (!atTop()) {
         ptrCandidate = false;
         return;
     }
     isPulling.value = true;
-    pullDist.value = Math.min(96, (dy - PTR_COMMIT) * 0.5); // rubber-band
+    pullDist.value = Math.min(96, (dy - PTR_COMMIT) * 0.5);
     if (e.cancelable) e.preventDefault();
 }
 async function ptrEnd() {
@@ -218,14 +273,65 @@ async function ptrEnd() {
     }
 }
 
-watch(search, () => {
+// ----- keyboard shortcuts -----
+function moveCursor(delta) {
+    const list = visible.value;
+    if (!list.length) return;
+    cursor.value = Math.min(Math.max(cursor.value + delta, 0), list.length - 1);
+    const e = list[cursor.value];
+    if (paneMode.value && e) open(e);
+    // scroll into view
+    const el = listEl.value?.querySelector(`[data-k="${keyOf(e)}"]`);
+    el?.scrollIntoView({ block: 'nearest' });
+}
+function onKey(ev) {
+    const tag = (ev.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || ev.target.isContentEditable) return;
+    const k = ev.key;
+    if (k === '/') { ev.preventDefault(); document.getElementById('mb-search-input')?.focus(); return; }
+    if (k === 'n' || k === 'N') { ev.preventDefault(); router.push('/compose'); return; }
+    if (k === 'j' || k === 'J') { ev.preventDefault(); moveCursor(1); return; }
+    if (k === 'k' || k === 'K') { ev.preventDefault(); moveCursor(-1); return; }
+    const cur = cursor.value >= 0 ? visible.value[cursor.value] : null;
+    if (!cur) return;
+    if (k === 'Enter') { open(cur); }
+    else if (k === 'u' || k === 'U') { toggleRead(cur); }
+    else if (k === 'i' || k === 'I' || k === 's' || k === 'S') { if (!isSent.value) toggleStar(cur); }
+    else if ((k === 'e' || k === 'E' || k === 'Delete' || k === '#') && !isSent.value) { trash(cur); }
+}
+
+// notification banner (mobile-first, shown anywhere)
+const notifState = ref(notificationPermission());
+const notifDismissed = ref(sessionStorage.getItem('notif_dismissed') === '1');
+const showNotifBanner = computed(() => props.folder === 'inbox' && pushSupported() && !!vapidKey() && notifState.value === 'default' && !notifDismissed.value);
+async function enableNotif() {
+    await requestAndSubscribe(auth.accounts);
+    notifState.value = notificationPermission();
+}
+function dismissNotif() {
+    notifDismissed.value = true;
+    sessionStorage.setItem('notif_dismissed', '1');
+}
+
+function onReaderChanged() {
+    load();
+}
+
+let searchDep = computed(() => ui.search);
+watch(searchDep, () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(load, 300);
 });
-watch(() => [props.folder, auth.active], load, { immediate: true });
+watch(() => [props.folder, auth.active], () => {
+    selectedId.value = null;
+    cursor.value = -1;
+    clearChecks();
+    load();
+}, { immediate: true });
 
 onMounted(() => {
     window.addEventListener('mailbox:new-mail', poll);
+    window.addEventListener('keydown', onKey);
     pollTimer = setInterval(poll, 45000);
     const el = rootEl.value;
     if (el) {
@@ -237,6 +343,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
     window.removeEventListener('mailbox:new-mail', poll);
+    window.removeEventListener('keydown', onKey);
     clearTimeout(searchTimer);
     clearInterval(pollTimer);
     const el = rootEl.value;
@@ -250,77 +357,111 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="mb" ref="rootEl">
-        <header class="mb-head">
-            <div class="mb-hello">
-                <span class="hi" v-if="props.folder === 'inbox'">Merhaba 👋</span>
-                <h1 class="mb-title">{{ props.folder === 'inbox' ? (greetName || title) : title }}</h1>
-            </div>
-            <button class="mb-avatar" :style="{ background: headerAvatar.color }" title="Hesaplar" @click="accountSheet.open()">
-                {{ headerAvatar.text }}
-            </button>
-        </header>
-
-        <div class="mb-search">
-            <svg viewBox="0 0 24 24" class="si"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M21 21l-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-            <input v-model="search" type="search" placeholder="Mail içinde ara" />
-        </div>
-
-        <div v-if="showNotifBanner" class="notif-banner">
-            <span>🔔 Yeni mail bildirimi almak için izin verin.</span>
-            <span class="nb-actions">
-                <button class="nb-yes" @click="enableNotif">Aç</button>
-                <button class="nb-no" @click="dismissNotif">×</button>
-            </span>
-        </div>
-
-        <button v-if="newCount > 0" class="new-mail" @click="newCount = 0">{{ newCount }} yeni ileti ↑</button>
-
-        <div class="ptr" :class="{ anim: !isPulling }" :style="{ height: pullDist + 'px' }">
-            <span
-                class="ptr-ic"
-                :class="{ spin: refreshing }"
-                :style="{ transform: refreshing ? '' : `rotate(${pullDist * 3}deg)`, opacity: (pullDist > 6 || refreshing) ? 1 : 0 }"
-            >↻</span>
-        </div>
-
-        <div class="mb-list" ref="listEl">
-            <div v-if="loading" class="mb-empty">Yükleniyor…</div>
-            <div v-else-if="!emails.length" class="mb-empty">Bu klasör boş.</div>
-
-            <template v-for="g in groups" :key="g.label">
-                <div class="mb-group">{{ g.label }}</div>
-                <button
-                    v-for="e in g.items"
-                    :key="e._account + ':' + e.id"
-                    class="mb-row"
-                    :class="{ unread: !e.read && !isSent }"
-                    @click="open(e)"
-                >
-                    <span class="ava" :style="{ background: avatarColor(avatarSeed(e)) }">{{ initials(who(e)) }}</span>
-                    <span class="mb-body">
-                        <span class="mb-line1">
-                            <span class="mb-who">{{ who(e) }}</span>
-                            <span class="mb-time">{{ fmt(e.received_at) }}</span>
-                        </span>
-                        <span class="mb-subject">
-                            {{ e.subject || '(konu yok)' }}
-                            <span v-if="auth.isUnified" class="mb-acc">{{ e._account }}</span>
-                        </span>
-                        <span class="mb-snippet">{{ e.snippet }}</span>
-                    </span>
-                    <span class="mb-side">
-                        <span
-                            class="mb-star"
-                            :class="{ on: e.starred }"
-                            @click.stop="!isSent && toggleStar(e)"
-                        >{{ e.starred ? '★' : (isSent ? '' : '☆') }}</span>
-                        <span v-if="!isSent" class="mb-trash" :title="isTrash ? 'Geri al' : 'Sil'" @click.stop="trash(e)">
-                            {{ isTrash ? '↩︎' : '🗑' }}
-                        </span>
-                    </span>
+    <div class="mb" ref="rootEl" :class="{ pane: paneMode, [`d-${ui.density}`]: true }">
+        <!-- LIST COLUMN -->
+        <div class="mb-listcol">
+            <header class="mb-head">
+                <div class="mb-hello">
+                    <span class="hi" v-if="props.folder === 'inbox' && !isDesktop">Merhaba 👋</span>
+                    <h1 class="mb-title">{{ (props.folder === 'inbox' && !isDesktop) ? (greetName || title) : title }}</h1>
+                </div>
+                <button v-if="!isDesktop" class="mb-avatar" :style="{ background: headerAvatar.color }" title="Hesaplar" @click="accountSheet.open()">
+                    {{ headerAvatar.text }}
                 </button>
-            </template>
+                <button v-if="!isSent" class="mb-filter" :class="{ on: onlyUnread }" title="Okunmamışlar" @click="onlyUnread = !onlyUnread">
+                    {{ onlyUnread ? 'Okunmamış' : 'Tümü' }}
+                </button>
+            </header>
+
+            <div class="mb-search" v-if="!isDesktop">
+                <svg viewBox="0 0 24 24" class="si"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M21 21l-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                <input id="mb-search-input" v-model="ui.search" type="search" placeholder="Mail içinde ara" />
+            </div>
+
+            <!-- bulk bar -->
+            <div v-if="checked.size" class="mb-bulk">
+                <span class="bulk-n">{{ checked.size }} seçili</span>
+                <button class="bulk-b" title="Okundu" @click="bulkRead(true)">📖</button>
+                <button class="bulk-b" title="Okunmadı" @click="bulkRead(false)">✉️</button>
+                <button v-if="!isSent" class="bulk-b" title="Yıldızla" @click="bulkStar">★</button>
+                <button v-if="!isSent" class="bulk-b" title="Sil" @click="bulkTrash">🗑</button>
+                <button class="bulk-b close" title="Temizle" @click="clearChecks">✕</button>
+            </div>
+
+            <div v-if="showNotifBanner" class="notif-banner">
+                <span>🔔 Yeni mail bildirimi almak için izin verin.</span>
+                <span class="nb-actions">
+                    <button class="nb-yes" @click="enableNotif">Aç</button>
+                    <button class="nb-no" @click="dismissNotif">×</button>
+                </span>
+            </div>
+
+            <button v-if="newCount > 0" class="new-mail" @click="newCount = 0">{{ newCount }} yeni ileti ↑</button>
+
+            <div class="ptr" :class="{ anim: !isPulling }" :style="{ height: pullDist + 'px' }">
+                <span class="ptr-ic" :class="{ spin: refreshing }" :style="{ transform: refreshing ? '' : `rotate(${pullDist * 3}deg)`, opacity: (pullDist > 6 || refreshing) ? 1 : 0 }">↻</span>
+            </div>
+
+            <div class="mb-list" ref="listEl">
+                <div v-if="loading" class="mb-empty">Yükleniyor…</div>
+                <div v-else-if="!visible.length" class="mb-empty">{{ ui.search ? 'Eşleşen ileti yok.' : 'Bu klasör boş.' }}</div>
+
+                <template v-for="g in groups" :key="g.label">
+                    <div class="mb-group">{{ g.label }}</div>
+                    <div
+                        v-for="e in g.items"
+                        :key="e._account + ':' + e.id"
+                        :data-k="e._account + ':' + e.id"
+                        class="mb-row"
+                        :class="{ unread: !e.read && !isSent, active: selectedId === e.id, picked: checked.has(e._account + ':' + e.id) }"
+                        @click="open(e)"
+                    >
+                        <button class="mb-check" :class="{ on: checked.has(e._account + ':' + e.id) }" @click.stop="toggleCheck(e)">
+                            <span class="mb-ava" :style="{ background: avatarColor(avatarSeed(e)) }">{{ initials(who(e)) }}</span>
+                            <span class="mb-tick">✓</span>
+                        </button>
+                        <span class="mb-body">
+                            <span class="mb-line1">
+                                <span class="mb-who"><span v-if="!e.read && !isSent" class="dot" />{{ who(e) }}</span>
+                                <span class="mb-time">{{ fmt(e.received_at) }}</span>
+                            </span>
+                            <span class="mb-subject">
+                                {{ e.subject || '(konu yok)' }}
+                                <span v-if="auth.isUnified" class="mb-acc">{{ e._account }}</span>
+                            </span>
+                            <span class="mb-snippet">{{ e.snippet }}</span>
+                        </span>
+                        <span class="mb-side">
+                            <span v-if="!isSent" class="mb-star" :class="{ on: e.starred }" @click.stop="toggleStar(e)">{{ e.starred ? '★' : '☆' }}</span>
+                            <span v-if="!isSent" class="mb-trash" :title="isTrash ? 'Geri al' : 'Sil'" @click.stop="trash(e)">{{ isTrash ? '↩︎' : '🗑' }}</span>
+                        </span>
+                    </div>
+                </template>
+            </div>
+
+            <div v-if="isDesktop" class="mb-status">
+                <span>{{ visible.length }} öğe</span>
+                <span class="dotsep">·</span>
+                <span>{{ auth.totalUnread }} okunmamış</span>
+            </div>
+        </div>
+
+        <!-- READING PANE (desktop) -->
+        <div v-if="paneMode" class="mb-pane">
+            <Reader
+                v-if="selectedId"
+                :id="selectedId"
+                :acc="selectedAcc"
+                :type="isSent ? 'sent' : 'received'"
+                embedded
+                @changed="onReaderChanged"
+                @close="selectedId = null"
+            />
+            <div v-else class="pane-empty">
+                <div class="pane-empty-icon">✉️</div>
+                <p class="pane-empty-title">Okumak için bir ileti seçin</p>
+                <p class="pane-empty-sub">Soldaki listeden bir öğe seçin veya <button class="linklike" @click="router.push('/compose')">yeni ileti yazın</button>.</p>
+            </div>
         </div>
     </div>
 </template>
