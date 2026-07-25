@@ -9,8 +9,20 @@ return [
      * These keys must be safely stored and should not change.
      */
     'vapid' => [
-        // Falls back to the app URL so it never needs to be set manually.
-        'subject' => env('VAPID_SUBJECT') ?: env('APP_URL', 'https://localhost'),
+        // The VAPID subject MUST be a mailto: or https:// URL — push services
+        // (Apple/iOS especially) reject a bare value like "mailbox". Normalise
+        // it so a misconfigured VAPID_SUBJECT can never silently break push:
+        // an email becomes mailto:<email>, anything else falls back to APP_URL.
+        'subject' => (static function () {
+            $subject = (string) (env('VAPID_SUBJECT') ?: env('APP_URL', 'https://localhost'));
+            if (preg_match('#^(mailto:|https?://)#i', $subject)) {
+                return $subject;
+            }
+
+            return str_contains($subject, '@')
+                ? 'mailto:'.$subject
+                : (env('APP_URL') ?: 'https://localhost');
+        })(),
         'public_key' => env('VAPID_PUBLIC_KEY'),
         'private_key' => env('VAPID_PRIVATE_KEY'),
         'pem_file' => env('VAPID_PEM_FILE'),
