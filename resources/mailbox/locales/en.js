@@ -1,0 +1,60 @@
+export default {
+    brand: 'Mailbox',
+    nav: {
+        mail: 'Mail', calendar: 'Calendar', people: 'People', tasks: 'Tasks',
+        inbox: 'Inbox', starred: 'Starred', sent: 'Sent', trash: 'Trash', compose: 'New message',
+    },
+    common: {
+        all: 'All', unread: 'Unread', search: 'Search', cancel: 'Cancel', save: 'Save', add: 'Add',
+        delete: 'Delete', close: 'Close', back: 'Back', undo: 'Undo', loading: 'Loading…',
+        today: 'Today', yesterday: 'Yesterday', open: 'Open',
+    },
+    mail: {
+        greeting: 'Hello 👋', searchPlaceholder: 'Search mail', searchTop: 'Search  ( / )',
+        empty: 'This folder is empty.', noMatch: 'No matching messages.', noSubject: '(no subject)', noRecipient: '(no recipient)',
+        to: 'To: {v}', reply: 'Reply', replyAll: 'Reply all', forward: 'Forward', markUnread: 'Mark unread',
+        star: 'Star', selected: '{n} selected', movedToTrash: 'Message moved to Trash', restored: 'Message restored',
+        movedN: '{n} messages moved', newMail: '{n} new messages ↑', selectToRead: 'Select a message to read',
+        selectSub: 'Pick an item from the list on the left, or', composeLink: 'write a new message', attachments: 'Attachments',
+        items: '{n} items', unreadCount: '{n} unread', notFound: 'Message not found.', message: 'Message', sentItem: 'Sent',
+    },
+    compose: {
+        title: 'New message', from: 'From', to: 'To', subject: 'Subject', subjectPh: 'Subject', body: 'Write your message…',
+        send: 'Send', ccbcc: 'Cc/Bcc', needRecipient: 'Add at least one recipient.', failed: 'Could not send.',
+        recipientPh: 'name@example.com', origMessage: 'Original message', from2: 'From', date: 'Date',
+    },
+    login: {
+        title: 'Mailbox', addTitle: 'Add account', sub: 'Sign in with your email and password.',
+        addSub: 'Add another mail account.', email: 'Email', password: 'Password',
+        signIn: 'Sign in', addAccount: 'Add account', failed: 'Sign in failed.',
+    },
+    account: {
+        accounts: 'Accounts', all: 'All accounts', unified: 'Unified', unifiedView: 'Unified view',
+        add: '＋ Add account', signOut: 'Sign out',
+    },
+    notif: {
+        prompt: '🔔 Enable notifications for new mail.', enable: '🔔 Enable notifications', on: 'Enable',
+        blocked: 'Notifications blocked — allow them in browser settings.',
+    },
+    settings: {
+        readingPane: 'Reading pane', right: 'Right', bottom: 'Bottom', off: 'Off',
+        density: 'Density', comfortable: 'Comfortable', compact: 'Compact',
+        theme: 'Theme', system: 'System', light: 'Light', dark: 'Dark', language: 'Language',
+    },
+    calendar: {
+        title: 'Calendar', newEvent: 'New event', today: 'Today', eventTitle: 'Event name',
+        time: 'Time', location: 'Location', online: 'Online', noEvents: 'No events for this day.',
+        deleteConfirm: 'Delete this event?', save: 'Save', allDay: 'All day',
+        days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    },
+    people: {
+        title: 'People', searchPh: 'Search contacts', add: 'Add contact', empty: 'No contacts yet.',
+        name: 'Name', email: 'Email', phone: 'Phone', company: 'Company', jobTitle: 'Title', notes: 'Notes',
+        sendMail: 'Send email', edit: 'Edit', deleteConfirm: 'Delete this contact?', newContact: 'New contact',
+        favorite: 'Favorite',
+    },
+    tasks: {
+        title: 'My tasks', addPh: 'Add a task and press Enter', add: 'Add', open: '{n} open',
+        empty: 'No tasks. Add your first one.', due: 'Due', done: 'Done',
+    },
+};

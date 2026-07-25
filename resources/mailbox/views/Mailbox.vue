@@ -6,6 +6,7 @@ import { useUi } from '../stores/ui';
 import { initials, avatarColor } from '../avatar';
 import { pushSupported, notificationPermission, requestAndSubscribe, vapidKey } from '../push';
 import { useIsDesktop } from '../useMedia';
+import { t, localeTag } from '../i18n';
 import Reader from '../components/Reader.vue';
 
 const props = defineProps({ folder: { type: String, default: 'inbox' } });
@@ -36,8 +37,8 @@ const selectedId = ref(null);
 const selectedAcc = ref('');
 const cursor = ref(-1);
 
-const titles = { inbox: 'Gelen kutusu', starred: 'Yıldızlı', sent: 'Gönderilenler', trash: 'Çöp kutusu' };
-const title = computed(() => titles[props.folder] || 'Gelen kutusu');
+const folderKeys = ['inbox', 'starred', 'sent', 'trash'];
+const title = computed(() => t(`nav.${props.folder}`) || t('nav.inbox'));
 const isSent = computed(() => props.folder === 'sent');
 const isTrash = computed(() => props.folder === 'trash');
 const paneMode = computed(() => isDesktop.value && ui.readingPane !== 'off');
@@ -101,12 +102,12 @@ function dayLabel(iso) {
     if (!iso) return '';
     const d = new Date(iso);
     const now = new Date();
-    const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const y0 = new Date(t0);
-    y0.setDate(y0.getDate() - 1);
-    if (d >= t0) return 'Bugün';
-    if (d >= y0) return 'Dün';
-    return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
+    const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yest0 = new Date(today0);
+    yest0.setDate(yest0.getDate() - 1);
+    if (d >= today0) return t('common.today');
+    if (d >= yest0) return t('common.yesterday');
+    return d.toLocaleDateString(localeTag(), { day: 'numeric', month: 'long' });
 }
 const groups = computed(() => {
     const out = [];
@@ -123,7 +124,7 @@ const groups = computed(() => {
 });
 
 function who(e) {
-    return isSent.value ? (e.to_email || '(alıcı yok)') : (e.from_name || e.from_email);
+    return isSent.value ? (e.to_email || t('mail.noRecipient')) : (e.from_name || e.from_email);
 }
 function avatarSeed(e) {
     return isSent.value ? (e.to_email || '') : (e.from_email || '');
@@ -132,8 +133,8 @@ function fmt(iso) {
     if (!iso) return '';
     const d = new Date(iso);
     const now = new Date();
-    if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+    if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString(localeTag(), { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString(localeTag(), { day: 'numeric', month: 'short' });
 }
 
 function open(e) {
@@ -169,7 +170,7 @@ async function trash(e) {
         load();
         return;
     }
-    ui.toast(isTrash.value ? 'İleti geri alındı' : 'İleti çöp kutusuna taşındı', async () => {
+    ui.toast(isTrash.value ? t('mail.restored') : t('mail.movedToTrash'), async () => {
         await auth.api(e._account).patch(`/emails/${e.id}`, { folder: from }).catch(() => {});
         auth.refreshUnread();
         load();
@@ -212,7 +213,7 @@ async function bulkTrash() {
     clearChecks();
     await Promise.all(items.map(({ e }) => auth.api(e._account).patch(`/emails/${e.id}`, { folder: isTrash.value ? 'inbox' : 'trash' }).catch(() => {})));
     auth.refreshUnread();
-    ui.toast(`${items.length} ileti taşındı`, async () => {
+    ui.toast(t('mail.movedN', { n: items.length }), async () => {
         await Promise.all(items.map(({ e, from }) => auth.api(e._account).patch(`/emails/${e.id}`, { folder: from }).catch(() => {})));
         auth.refreshUnread();
         load();
@@ -362,49 +363,56 @@ onBeforeUnmount(() => {
         <div class="mb-listcol">
             <header class="mb-head">
                 <div class="mb-hello">
-                    <span class="hi" v-if="props.folder === 'inbox' && !isDesktop">Merhaba 👋</span>
+                    <span class="hi" v-if="props.folder === 'inbox' && !isDesktop">{{ t('mail.greeting') }}</span>
                     <h1 class="mb-title">{{ (props.folder === 'inbox' && !isDesktop) ? (greetName || title) : title }}</h1>
                 </div>
-                <button v-if="!isDesktop" class="mb-avatar" :style="{ background: headerAvatar.color }" title="Hesaplar" @click="accountSheet.open()">
+                <button v-if="!isDesktop" class="mb-avatar" :style="{ background: headerAvatar.color }" :title="t('account.accounts')" @click="accountSheet.open()">
                     {{ headerAvatar.text }}
                 </button>
-                <button v-if="!isSent" class="mb-filter" :class="{ on: onlyUnread }" title="Okunmamışlar" @click="onlyUnread = !onlyUnread">
-                    {{ onlyUnread ? 'Okunmamış' : 'Tümü' }}
+                <button v-if="!isSent" class="mb-filter" :class="{ on: onlyUnread }" @click="onlyUnread = !onlyUnread">
+                    {{ onlyUnread ? t('common.unread') : t('common.all') }}
                 </button>
             </header>
 
             <div class="mb-search" v-if="!isDesktop">
                 <svg viewBox="0 0 24 24" class="si"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M21 21l-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-                <input id="mb-search-input" v-model="ui.search" type="search" placeholder="Mail içinde ara" />
+                <input id="mb-search-input" v-model="ui.search" type="search" :placeholder="t('mail.searchPlaceholder')" />
+            </div>
+
+            <!-- mobile folder chips (bottom nav is the app switcher on mobile) -->
+            <div class="mb-chips" v-if="!isDesktop">
+                <button v-for="fk in folderKeys" :key="fk" class="mb-chip" :class="{ on: props.folder === fk }" @click="router.push(`/f/${fk}`)">
+                    {{ t(`nav.${fk}`) }}
+                </button>
             </div>
 
             <!-- bulk bar -->
             <div v-if="checked.size" class="mb-bulk">
-                <span class="bulk-n">{{ checked.size }} seçili</span>
-                <button class="bulk-b" title="Okundu" @click="bulkRead(true)">📖</button>
-                <button class="bulk-b" title="Okunmadı" @click="bulkRead(false)">✉️</button>
-                <button v-if="!isSent" class="bulk-b" title="Yıldızla" @click="bulkStar">★</button>
-                <button v-if="!isSent" class="bulk-b" title="Sil" @click="bulkTrash">🗑</button>
-                <button class="bulk-b close" title="Temizle" @click="clearChecks">✕</button>
+                <span class="bulk-n">{{ t('mail.selected', { n: checked.size }) }}</span>
+                <button class="bulk-b" @click="bulkRead(true)">📖</button>
+                <button class="bulk-b" @click="bulkRead(false)">✉️</button>
+                <button v-if="!isSent" class="bulk-b" @click="bulkStar">★</button>
+                <button v-if="!isSent" class="bulk-b" @click="bulkTrash">🗑</button>
+                <button class="bulk-b close" @click="clearChecks">✕</button>
             </div>
 
             <div v-if="showNotifBanner" class="notif-banner">
-                <span>🔔 Yeni mail bildirimi almak için izin verin.</span>
+                <span>{{ t('notif.prompt') }}</span>
                 <span class="nb-actions">
-                    <button class="nb-yes" @click="enableNotif">Aç</button>
+                    <button class="nb-yes" @click="enableNotif">{{ t('notif.on') }}</button>
                     <button class="nb-no" @click="dismissNotif">×</button>
                 </span>
             </div>
 
-            <button v-if="newCount > 0" class="new-mail" @click="newCount = 0">{{ newCount }} yeni ileti ↑</button>
+            <button v-if="newCount > 0" class="new-mail" @click="newCount = 0">{{ t('mail.newMail', { n: newCount }) }}</button>
 
             <div class="ptr" :class="{ anim: !isPulling }" :style="{ height: pullDist + 'px' }">
                 <span class="ptr-ic" :class="{ spin: refreshing }" :style="{ transform: refreshing ? '' : `rotate(${pullDist * 3}deg)`, opacity: (pullDist > 6 || refreshing) ? 1 : 0 }">↻</span>
             </div>
 
             <div class="mb-list" ref="listEl">
-                <div v-if="loading" class="mb-empty">Yükleniyor…</div>
-                <div v-else-if="!visible.length" class="mb-empty">{{ ui.search ? 'Eşleşen ileti yok.' : 'Bu klasör boş.' }}</div>
+                <div v-if="loading" class="mb-empty">{{ t('common.loading') }}</div>
+                <div v-else-if="!visible.length" class="mb-empty">{{ ui.search ? t('mail.noMatch') : t('mail.empty') }}</div>
 
                 <template v-for="g in groups" :key="g.label">
                     <div class="mb-group">{{ g.label }}</div>
@@ -426,7 +434,7 @@ onBeforeUnmount(() => {
                                 <span class="mb-time">{{ fmt(e.received_at) }}</span>
                             </span>
                             <span class="mb-subject">
-                                {{ e.subject || '(konu yok)' }}
+                                {{ e.subject || t('mail.noSubject') }}
                                 <span v-if="auth.isUnified" class="mb-acc">{{ e._account }}</span>
                             </span>
                             <span class="mb-snippet">{{ e.snippet }}</span>
@@ -440,10 +448,11 @@ onBeforeUnmount(() => {
             </div>
 
             <div v-if="isDesktop" class="mb-status">
-                <span>{{ visible.length }} öğe</span>
+                <span>{{ t('mail.items', { n: visible.length }) }}</span>
                 <span class="dotsep">·</span>
-                <span>{{ auth.totalUnread }} okunmamış</span>
+                <span>{{ t('mail.unreadCount', { n: auth.totalUnread }) }}</span>
             </div>
+            <button v-if="!isDesktop" class="fab" @click="router.push('/compose')" :title="t('nav.compose')">✏️</button>
         </div>
 
         <!-- READING PANE (desktop) -->
@@ -459,8 +468,8 @@ onBeforeUnmount(() => {
             />
             <div v-else class="pane-empty">
                 <div class="pane-empty-icon">✉️</div>
-                <p class="pane-empty-title">Okumak için bir ileti seçin</p>
-                <p class="pane-empty-sub">Soldaki listeden bir öğe seçin veya <button class="linklike" @click="router.push('/compose')">yeni ileti yazın</button>.</p>
+                <p class="pane-empty-title">{{ t('mail.selectToRead') }}</p>
+                <p class="pane-empty-sub">{{ t('mail.selectSub') }} <button class="linklike" @click="router.push('/compose')">{{ t('mail.composeLink') }}</button>.</p>
             </div>
         </div>
     </div>
