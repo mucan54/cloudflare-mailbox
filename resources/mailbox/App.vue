@@ -85,6 +85,10 @@ function onSwMessage(e) {
         auth.refreshUnread().catch(() => {});
         window.dispatchEvent(new CustomEvent('mailbox:new-mail'));
     }
+    // Tap on a push notification → open that message in-app.
+    if (e.data?.type === 'open-mail' && e.data.url) {
+        router.push(e.data.url);
+    }
 }
 watch(
     () => auth.totalUnread,
