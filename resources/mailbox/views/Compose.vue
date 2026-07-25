@@ -43,6 +43,53 @@ function onKey(e, list, inputRef) {
     }
 }
 
+// ----- recipient autocomplete (address book) -----
+const lists = { to, cc, bcc };
+const inputs = { to: toInput, cc: ccInput, bcc: bccInput };
+const suggestions = ref([]);
+const sugFor = ref(null);
+const sugIndex = ref(-1);
+let sugTimer = null;
+
+function queryRecipients(field) {
+    sugFor.value = field;
+    sugIndex.value = -1;
+    const text = inputs[field].value.trim();
+    clearTimeout(sugTimer);
+    sugTimer = setTimeout(async () => {
+        try {
+            const { data } = await auth.api(from.value).get('/recipients', { params: { q: text } });
+            const taken = new Set([...to.value, ...cc.value, ...bcc.value].map((x) => x.toLowerCase()));
+            suggestions.value = (data.data ?? []).filter((s) => !taken.has(String(s.email).toLowerCase()));
+        } catch (_) {
+            suggestions.value = [];
+        }
+    }, 160);
+}
+function pickSug(field, s) {
+    const list = lists[field];
+    if (!list.value.includes(s.email)) list.value.push(s.email);
+    inputs[field].value = '';
+    suggestions.value = [];
+    sugFor.value = null;
+}
+function sugNav(field, dir, e) {
+    if (sugFor.value !== field || !suggestions.value.length) return;
+    e.preventDefault();
+    sugIndex.value = (sugIndex.value + dir + suggestions.value.length) % suggestions.value.length;
+}
+function onEnter(field) {
+    if (sugFor.value === field && sugIndex.value >= 0 && suggestions.value[sugIndex.value]) {
+        pickSug(field, suggestions.value[sugIndex.value]);
+    } else {
+        addChip(lists[field], inputs[field]);
+        suggestions.value = [];
+    }
+}
+function hideSug() {
+    setTimeout(() => { suggestions.value = []; sugFor.value = null; }, 150);
+}
+
 function stripPrefix(s) {
     return (s || '').replace(/^(re|fwd|fw)\s*:\s*/i, '').trim();
 }
@@ -140,12 +187,27 @@ async function send() {
                         v-model="toInput"
                         class="chip-in"
                         type="text"
+                        inputmode="email"
+                        autocapitalize="none"
+                        autocomplete="off"
+                        spellcheck="false"
                         :placeholder="t('compose.recipientPh')"
-                        @keydown.enter.prevent="addChip(to, toInput)"
+                        @input="queryRecipients('to')"
+                        @focus="queryRecipients('to')"
+                        @keydown.enter.prevent="onEnter('to')"
+                        @keydown.down="sugNav('to', 1, $event)"
+                        @keydown.up="sugNav('to', -1, $event)"
                         @keydown="onKey($event, to, toInput)"
                         @keydown.delete="onBackspace(to, toInput)"
-                        @blur="addChip(to, toInput)"
+                        @blur="addChip(to, toInput); hideSug()"
                     />
+                    <div v-if="sugFor === 'to' && suggestions.length" class="sug">
+                        <button v-for="(s, i) in suggestions" :key="s.email" class="sug-item" :class="{ on: i === sugIndex }"
+                                @mousedown.prevent="pickSug('to', s)" @mouseenter="sugIndex = i">
+                            <span class="sug-name">{{ s.name }}</span>
+                            <span v-if="s.name !== s.email" class="sug-mail">{{ s.email }}</span>
+                        </button>
+                    </div>
                 </div>
                 <button class="cp-ccbtn" @click="showCc = !showCc">{{ t('compose.ccbcc') }}</button>
             </div>
@@ -155,14 +217,30 @@ async function send() {
                     <span class="cp-lab">Cc</span>
                     <div class="chips">
                         <span v-for="(c, i) in cc" :key="c" class="chip-tag">{{ c }} <button @click="removeChip(cc, i)">×</button></span>
-                        <input v-model="ccInput" class="chip-in" type="text" placeholder="Cc" @keydown.enter.prevent="addChip(cc, ccInput)" @keydown.delete="onBackspace(cc, ccInput)" @blur="addChip(cc, ccInput)" />
+                        <input v-model="ccInput" class="chip-in" type="text" inputmode="email" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="Cc"
+                               @input="queryRecipients('cc')" @focus="queryRecipients('cc')"
+                               @keydown.enter.prevent="onEnter('cc')" @keydown.down="sugNav('cc', 1, $event)" @keydown.up="sugNav('cc', -1, $event)"
+                               @keydown.delete="onBackspace(cc, ccInput)" @blur="addChip(cc, ccInput); hideSug()" />
+                        <div v-if="sugFor === 'cc' && suggestions.length" class="sug">
+                            <button v-for="(s, i) in suggestions" :key="s.email" class="sug-item" :class="{ on: i === sugIndex }" @mousedown.prevent="pickSug('cc', s)" @mouseenter="sugIndex = i">
+                                <span class="sug-name">{{ s.name }}</span><span v-if="s.name !== s.email" class="sug-mail">{{ s.email }}</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div class="cp-field">
                     <span class="cp-lab">Bcc</span>
                     <div class="chips">
                         <span v-for="(c, i) in bcc" :key="c" class="chip-tag">{{ c }} <button @click="removeChip(bcc, i)">×</button></span>
-                        <input v-model="bccInput" class="chip-in" type="text" placeholder="Bcc" @keydown.enter.prevent="addChip(bcc, bccInput)" @keydown.delete="onBackspace(bcc, bccInput)" @blur="addChip(bcc, bccInput)" />
+                        <input v-model="bccInput" class="chip-in" type="text" inputmode="email" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="Bcc"
+                               @input="queryRecipients('bcc')" @focus="queryRecipients('bcc')"
+                               @keydown.enter.prevent="onEnter('bcc')" @keydown.down="sugNav('bcc', 1, $event)" @keydown.up="sugNav('bcc', -1, $event)"
+                               @keydown.delete="onBackspace(bcc, bccInput)" @blur="addChip(bcc, bccInput); hideSug()" />
+                        <div v-if="sugFor === 'bcc' && suggestions.length" class="sug">
+                            <button v-for="(s, i) in suggestions" :key="s.email" class="sug-item" :class="{ on: i === sugIndex }" @mousedown.prevent="pickSug('bcc', s)" @mouseenter="sugIndex = i">
+                                <span class="sug-name">{{ s.name }}</span><span v-if="s.name !== s.email" class="sug-mail">{{ s.email }}</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </template>

@@ -155,6 +155,20 @@ class MailboxApiTest extends TestCase
             ->assertJsonPath('email.to_email', 'x@y.com');
     }
 
+    public function test_recipient_suggestions_from_history_and_contacts(): void
+    {
+        $mailbox = $this->mailbox();
+        $mailbox->emails()->create(['cloudflare_account_id' => $mailbox->cloudflare_account_id, 'ingest_key' => 'r1', 'from_email' => 'jurgen@enerprax.de', 'from_name' => 'Jürgen', 'received_at' => now()]);
+        $mailbox->sentEmails()->create(['cloudflare_account_id' => $mailbox->cloudflare_account_id, 'driver' => 'api', 'from_email' => 'me@a.com', 'to' => ['ayse@magazam.net'], 'subject' => 'Hi', 'status' => 'queued', 'sent_at' => now()]);
+        $mailbox->contacts()->create(['name' => 'Zeynep', 'email' => 'zeynep@studio.co']);
+
+        Sanctum::actingAs($mailbox);
+
+        $this->getJson('/api/mailbox/recipients?q=jur')->assertOk()->assertJsonFragment(['email' => 'jurgen@enerprax.de']);
+        $this->getJson('/api/mailbox/recipients?q=ayse')->assertOk()->assertJsonFragment(['email' => 'ayse@magazam.net']);
+        $this->getJson('/api/mailbox/recipients?q=zey')->assertOk()->assertJsonFragment(['email' => 'zeynep@studio.co', 'name' => 'Zeynep']);
+    }
+
     public function test_push_subscribe(): void
     {
         $mailbox = $this->mailbox();

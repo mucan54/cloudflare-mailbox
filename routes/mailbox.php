@@ -5,6 +5,7 @@ use App\Http\Controllers\Mailbox\ContactController;
 use App\Http\Controllers\Mailbox\EventController;
 use App\Http\Controllers\Mailbox\InboxController;
 use App\Http\Controllers\Mailbox\PushController;
+use App\Http\Controllers\Mailbox\RecipientController;
 use App\Http\Controllers\Mailbox\SendController;
 use App\Http\Controllers\Mailbox\TaskController;
 use Illuminate\Support\Facades\Route;
@@ -28,6 +29,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/sent', [SendController::class, 'index']);
     Route::get('/sent/{sent}', [SendController::class, 'show']);
     Route::post('/send', [SendController::class, 'store']);
+
+    Route::get('/recipients', [RecipientController::class, 'suggest']);
 
     Route::post('/push-subscribe', [PushController::class, 'subscribe']);
     Route::delete('/push-subscribe', [PushController::class, 'unsubscribe']);

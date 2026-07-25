@@ -416,3 +416,17 @@ svg { width: 100%; height: 100%; display: block; }
 .btn.ghost { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
 .btn.danger { background: transparent; color: var(--danger); }
 .btn:disabled { opacity: .5; }
+
+/* ===== Recipient autocomplete ===== */
+.chips { position: relative; }
+.sug { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow-lg); max-height: 260px; overflow-y: auto; }
+.sug-item { display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left; padding: 8px 12px; }
+.sug-item.on { background: var(--brand-050); }
+.sug-name { font-size: 14px; font-weight: 600; }
+.sug-mail { font-size: 12px; color: var(--muted); }
+
+/* ===== iOS: 16px inputs so focusing never triggers auto-zoom ===== */
+@media (max-width: 1023px) {
+    .chip-in, .cp-sel, .cp-body, .lg-in, .mb-search input, .fld input, .fld select,
+    .tsk-add input, .sug-name, .modal input, .modal select { font-size: 16px; }
+}
