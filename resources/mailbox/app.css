@@ -459,6 +459,7 @@ svg { width: 100%; height: 100%; display: block; }
 .settings-body { flex: 1; overflow-y: auto; padding: 16px; max-width: 640px; width: 100%; margin: 0 auto; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
 .card-title { font-size: 15px; font-weight: 600; margin: 0 0 12px; }
+.card-sub { font-size: 13px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; }
 .settings .fld { margin-bottom: 12px; }
 .settings .fld input, .settings .fld select { height: 38px; }
 .set-area { padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); outline: none; color: var(--text); font-family: inherit; font-size: 14px; resize: vertical; }

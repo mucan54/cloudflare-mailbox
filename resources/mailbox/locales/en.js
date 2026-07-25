@@ -66,5 +66,8 @@ export default {
         currentPassword: 'Current password', newPassword: 'New password', confirmPassword: 'New password (again)',
         changePassword: 'Change password', pwChanged: 'Password changed', pwMismatch: 'New passwords do not match.',
         open: 'Profile & settings', edit: 'Edit',
+        notifications: 'Notifications', notifHint: 'Send a test notification to this device to check that push is working.',
+        testPush: 'Send test notification', testSent: 'Sent to {n} device(s) ✅', testFailed: 'Could not send notification.',
+        testNoSub: 'This device isn’t registered — allow notifications first.', notifBlocked: 'Notification permission not granted.', testNoVapid: 'No VAPID key on the server.',
     },
 };

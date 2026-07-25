@@ -283,6 +283,16 @@ class MailboxApiTest extends TestCase
         $this->assertDatabaseHas('push_subscriptions', ['endpoint' => 'https://push.example/abc']);
     }
 
+    public function test_push_test_reports_no_subscriptions(): void
+    {
+        $mailbox = $this->mailbox();
+        Sanctum::actingAs($mailbox);
+
+        $this->postJson('/api/mailbox/push-test')
+            ->assertOk()
+            ->assertJson(['sent' => 0, 'reason' => 'no_subscriptions']);
+    }
+
     public function test_incoming_mail_notifies_mailbox(): void
     {
         Notification::fake();

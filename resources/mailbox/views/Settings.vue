@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuth } from '../stores/auth';
 import { useUi } from '../stores/ui';
 import { t } from '../i18n';
+import { requestAndSubscribe, enablePushIfGranted, notificationPermission, pushSupported } from '../push';
 
 const auth = useAuth();
 const ui = useUi();
@@ -36,6 +37,33 @@ async function saveProfile() {
         ui.toast(t('profile.saved'));
     } finally {
         busy.value = false;
+    }
+}
+
+// ----- push notifications health check -----
+const testBusy = ref(false);
+async function testPush() {
+    testBusy.value = true;
+    try {
+        const perm = notificationPermission();
+        if (perm === 'default') {
+            const ok = await requestAndSubscribe(auth.accounts);
+            if (!ok) { ui.toast(t('profile.notifBlocked')); return; }
+        } else if (perm === 'granted') {
+            await enablePushIfGranted(auth.accounts);
+        } else {
+            ui.toast(t('profile.notifBlocked'));
+            return;
+        }
+        const { data } = await auth.api(email.value).post('/push-test');
+        if (data.reason === 'no_subscriptions') ui.toast(t('profile.testNoSub'));
+        else if (data.reason === 'vapid_not_configured') ui.toast(t('profile.testNoVapid'));
+        else if (data.sent > 0) ui.toast(t('profile.testSent', { n: data.sent }));
+        else ui.toast(t('profile.testFailed'));
+    } catch (_) {
+        ui.toast(t('profile.testFailed'));
+    } finally {
+        testBusy.value = false;
     }
 }
 
@@ -87,6 +115,14 @@ async function changePassword() {
                 </label>
                 <div class="settings-actions">
                     <button class="btn" :disabled="busy" @click="saveProfile">{{ t('profile.save') }}</button>
+                </div>
+            </section>
+
+            <section v-if="pushSupported()" class="card">
+                <h2 class="card-title">{{ t('profile.notifications') }}</h2>
+                <p class="card-sub">{{ t('profile.notifHint') }}</p>
+                <div class="settings-actions">
+                    <button class="btn ghost" :disabled="testBusy" @click="testPush">{{ testBusy ? '…' : t('profile.testPush') }}</button>
                 </div>
             </section>
 

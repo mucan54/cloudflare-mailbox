@@ -110,9 +110,18 @@ watch(() => auth.totalUnread, (n) => {
     setAppBadge(n);
 }, { immediate: true });
 watch(() => auth.accounts.length, () => enablePushIfGranted(auth.accounts).catch(() => {}));
+// Refresh the push subscription when the app is reopened/refocused — push
+// endpoints rotate and can go stale while the app is backgrounded, which is a
+// common cause of "notifications just stopped".
+function onVisible() {
+    if (document.visibilityState !== 'visible' || !auth.isAuthenticated) return;
+    auth.refreshUnread().catch(() => {});
+    enablePushIfGranted(auth.accounts).catch(() => {});
+}
 onMounted(() => {
     ui.applyTheme();
     if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', onSwMessage);
+    document.addEventListener('visibilitychange', onVisible);
     if (auth.isAuthenticated) {
         auth.refreshUnread().catch(() => {});
         enablePushIfGranted(auth.accounts).catch(() => {});
@@ -123,6 +132,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
     clearInterval(unreadTimer);
+    document.removeEventListener('visibilitychange', onVisible);
     if ('serviceWorker' in navigator) navigator.serviceWorker.removeEventListener('message', onSwMessage);
 });
 </script>
