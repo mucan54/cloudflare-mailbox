@@ -134,7 +134,7 @@ class MailboxApiTest extends TestCase
 
         Http::assertSent(function ($request) {
             return str_contains($request->url(), '/email/sending/send')
-                && $request['from'] === '"Jane Doe" <me@a.com>';
+                && $request['from'] === ['address' => 'me@a.com', 'name' => 'Jane Doe'];
         });
     }
 

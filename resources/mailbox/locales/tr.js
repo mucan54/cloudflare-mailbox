@@ -64,6 +64,6 @@ export default {
         save: 'Kaydet', saved: 'Profil kaydedildi', password: 'Şifre değiştir',
         currentPassword: 'Mevcut şifre', newPassword: 'Yeni şifre', confirmPassword: 'Yeni şifre (tekrar)',
         changePassword: 'Şifreyi değiştir', pwChanged: 'Şifre değiştirildi', pwMismatch: 'Yeni şifreler eşleşmiyor.',
-        open: 'Profil ve ayarlar',
+        open: 'Profil ve ayarlar', edit: 'Düzenle',
     },
 };

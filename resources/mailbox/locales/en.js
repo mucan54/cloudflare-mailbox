@@ -64,6 +64,6 @@ export default {
         save: 'Save', saved: 'Profile saved', password: 'Change password',
         currentPassword: 'Current password', newPassword: 'New password', confirmPassword: 'New password (again)',
         changePassword: 'Change password', pwChanged: 'Password changed', pwMismatch: 'New passwords do not match.',
-        open: 'Profile & settings',
+        open: 'Profile & settings', edit: 'Edit',
     },
 };

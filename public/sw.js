@@ -1,6 +1,6 @@
 // Mailbox PWA service worker (root scope). Handles install/activate, a tiny
 // app-shell cache, and Web Push notifications.
-const CACHE = 'mailbox-v3';
+const CACHE = 'mailbox-v4';
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
@@ -9,6 +9,11 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
     event.waitUntil(self.clients.claim());
+});
+
+// The page can nudge a freshly-installed worker to take over immediately.
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'skip-waiting') self.skipWaiting();
 });
 
 self.addEventListener('fetch', (event) => {
@@ -52,19 +57,20 @@ self.addEventListener('notificationclick', (event) => {
         (async () => {
             const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
             for (const client of clients) {
+                // App already open: tell it to navigate in-app (SPA router) for a
+                // smooth transition, then focus the window.
+                client.postMessage({ type: 'open-mail', url });
                 if ('focus' in client) {
-                    // App already open: navigate in-app (SPA router) for a smooth
-                    // transition instead of a full reload.
-                    client.postMessage({ type: 'open-mail', url });
                     try {
-                        return await client.focus();
+                        await client.focus();
                     } catch (_) {
-                        return;
+                        // ignore
                     }
+                    return;
                 }
             }
             // App closed: open a new window straight at the message URL.
-            return self.clients.openWindow(url);
+            if (self.clients.openWindow) return self.clients.openWindow(url);
         })(),
     );
 });

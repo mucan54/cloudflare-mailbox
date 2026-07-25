@@ -50,10 +50,10 @@ const currentFolder = computed(() => route.params.folder || 'inbox');
 const onFolder = computed(() => route.path.startsWith('/f/'));
 const hideNav = computed(() => route.path.startsWith('/mail/') || route.path === '/compose' || route.path === '/settings');
 
-function openSettings() {
+function openSettings(email = null) {
     settingsOpen.value = false;
     sheetOpen.value = false;
-    router.push('/settings');
+    router.push(email ? { path: '/settings', query: { acc: email } } : '/settings');
 }
 
 function goApp(a) { router.push(a.to); }
@@ -225,6 +225,9 @@ onBeforeUnmount(() => {
                         <button class="acct-pick" @click="pickAccount(a.email)">
                             <span class="ava ava-sm" :style="{ background: avatarColor(a.email) }">{{ initials(a.display_name || a.email) }}</span>
                             <span class="acct-meta"><b>{{ a.display_name || a.email }}</b><small>{{ a.email }}</small></span>
+                        </button>
+                        <button class="acct-edit" :title="t('profile.edit')" @click="openSettings(a.email)">
+                            <svg viewBox="0 0 24 24"><path d="M4 20h4l10-10-4-4L4 16v4Zm11-13 2 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         </button>
                         <button class="acct-signout" :title="t('account.signOut')" @click="signOut(a.email)">⏻</button>
                     </div>

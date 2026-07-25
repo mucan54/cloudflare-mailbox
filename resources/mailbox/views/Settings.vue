@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useAuth } from '../stores/auth';
 import { useUi } from '../stores/ui';
 import { t } from '../i18n';
@@ -8,8 +8,9 @@ import { t } from '../i18n';
 const auth = useAuth();
 const ui = useUi();
 const router = useRouter();
+const route = useRoute();
 
-const email = ref(auth.current?.email || '');
+const email = ref(route.query.acc || auth.current?.email || '');
 const displayName = ref('');
 const signature = ref('');
 const busy = ref(false);
