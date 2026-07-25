@@ -329,10 +329,12 @@ svg { width: 100%; height: 100%; display: block; }
 
 /* ===== ROUTE TRANSITION ===== */
 .main { position: relative; }
-.view-enter-active { transition: opacity .18s ease; }
-.view-leave-active { transition: opacity .18s ease; position: absolute; inset: 0; z-index: 1; }
-.view-enter-from, .view-leave-to { opacity: 0; }
-@media (prefers-reduced-motion: reduce) { .view-enter-active, .view-leave-active { transition: opacity .05s; } }
+/* The entering view appears INSTANTLY (its content is already cached), while
+   the leaving view fades out on top of it. Fading the entering view in from
+   opacity 0 used to flash the background through — the "blink" on swipe-back. */
+.view-leave-active { transition: opacity .16s ease; position: absolute; inset: 0; z-index: 1; }
+.view-leave-to { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .view-leave-active { transition: opacity .05s; } }
 
 /* ===== LOGIN ===== */
 .login { min-height: 100dvh; display: grid; place-items: center; padding: calc(24px + env(safe-area-inset-top)) 22px calc(24px + env(safe-area-inset-bottom)); background: var(--bg); }
