@@ -16,16 +16,22 @@ let searchTimer = null;
 const selected = computed(() => contacts.value.find((c) => c.id === selId.value) || null);
 
 async function load() {
+    const params = q.value ? { q: q.value } : {};
     try {
-        const { data } = await auth.api().get('/contacts', { params: q.value ? { q: q.value } : {} });
-        contacts.value = data.data ?? [];
+        const batches = await Promise.all(
+            auth.scope().map(async (acc) => {
+                const { data } = await auth.api(acc.email).get('/contacts', { params });
+                return (data.data ?? []).map((c) => ({ ...c, _account: acc.email }));
+            }),
+        );
+        contacts.value = batches.flat().sort((a, b) => a.name.localeCompare(b.name));
         if (!contacts.value.find((c) => c.id === selId.value)) selId.value = contacts.value[0]?.id ?? null;
     } catch (_) {
         contacts.value = [];
     }
 }
 function openNew() {
-    form.value = { name: '', email: '', phone: '', company: '', title: '', notes: '' };
+    form.value = { name: '', email: '', phone: '', company: '', title: '', notes: '', account: auth.current?.email };
 }
 function edit(c) {
     form.value = { ...c };
@@ -33,10 +39,11 @@ function edit(c) {
 async function save() {
     const f = form.value;
     if (!f.name.trim()) return;
+    const target = f._account || f.account;
     try {
-        if (f.id) await auth.api().put(`/contacts/${f.id}`, f);
+        if (f.id) await auth.api(target).put(`/contacts/${f.id}`, f);
         else {
-            const { data } = await auth.api().post('/contacts', f);
+            const { data } = await auth.api(target).post('/contacts', f);
             selId.value = data.contact.id;
         }
         form.value = null;
@@ -45,7 +52,7 @@ async function save() {
 }
 async function remove(c) {
     if (!confirm(t('people.deleteConfirm'))) return;
-    await auth.api().delete(`/contacts/${c.id}`).catch(() => {});
+    await auth.api(c._account).delete(`/contacts/${c.id}`).catch(() => {});
     if (selId.value === c.id) selId.value = null;
     load();
 }
@@ -57,6 +64,7 @@ watch(q, () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(load, 300);
 });
+watch(() => auth.active, load);
 onMounted(load);
 </script>
 
@@ -73,9 +81,12 @@ onMounted(load);
             </div>
             <div class="ppl-rows">
                 <div v-if="!contacts.length" class="mb-empty">{{ t('people.empty') }}</div>
-                <button v-for="c in contacts" :key="c.id" class="ppl-row" :class="{ active: selId === c.id }" @click="selId = c.id">
+                <button v-for="c in contacts" :key="c._account + ':' + c.id" class="ppl-row" :class="{ active: selId === c.id }" @click="selId = c.id">
                     <span class="ava ava-sm" :style="{ background: avatarColor(c.email || c.name) }">{{ initials(c.name) }}</span>
-                    <span class="acct-meta"><b>{{ c.name }}</b><small>{{ c.email || c.company || '' }}</small></span>
+                    <span class="acct-meta">
+                        <b>{{ c.name }}</b>
+                        <small>{{ c.email || c.company || '' }}<span v-if="auth.isUnified" class="mb-acc" style="margin-left:6px">{{ c._account }}</span></small>
+                    </span>
                 </button>
             </div>
         </div>
@@ -108,6 +119,12 @@ onMounted(load);
         <div v-if="form" class="modal-scrim" @click.self="form = null">
             <div class="modal">
                 <h2 class="modal-title">{{ form.id ? t('people.edit') : t('people.newContact') }}</h2>
+                <label v-if="auth.isUnified && !form.id" class="fld">
+                    <span>{{ t('compose.from') }}</span>
+                    <select v-model="form.account" class="cal-acc-sel">
+                        <option v-for="a in auth.accounts" :key="a.email" :value="a.email">{{ a.display_name || a.email }}</option>
+                    </select>
+                </label>
                 <label class="fld"><span>{{ t('people.name') }}</span><input v-model="form.name" type="text" /></label>
                 <label class="fld"><span>{{ t('people.email') }}</span><input v-model="form.email" type="email" /></label>
                 <div class="fld-row">

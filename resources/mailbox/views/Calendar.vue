@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { useAuth } from '../stores/auth';
+import { avatarColor } from '../avatar';
 import { t, localeTag } from '../i18n';
 
 const auth = useAuth();
@@ -35,9 +36,15 @@ async function load() {
     const start = new Date(cur.value);
     start.setDate(start.getDate() - 7);
     const end = new Date(cur.value.getFullYear(), cur.value.getMonth() + 1, 7);
+    const params = { from: keyOf(start), to: keyOf(end) };
     try {
-        const { data } = await auth.api().get('/events', { params: { from: keyOf(start), to: keyOf(end) } });
-        events.value = data.data ?? [];
+        const batches = await Promise.all(
+            auth.scope().map(async (acc) => {
+                const { data } = await auth.api(acc.email).get('/events', { params });
+                return (data.data ?? []).map((e) => ({ ...e, _account: acc.email }));
+            }),
+        );
+        events.value = batches.flat();
     } catch (_) {
         events.value = [];
     }
@@ -54,12 +61,13 @@ function shiftMonth(n) {
     cur.value = new Date(cur.value.getFullYear(), cur.value.getMonth() + n, 1);
 }
 function openNew(dateKey) {
-    form.value = { title: '', dateKey: dateKey || keyOf(new Date()), time: '09:00', location: '' };
+    form.value = { title: '', dateKey: dateKey || keyOf(new Date()), time: '09:00', location: '', account: auth.current?.email };
 }
 function editEvent(e) {
     form.value = {
         id: e.id, title: e.title, dateKey: e.starts_at.slice(0, 10),
         time: e.all_day ? '' : new Date(e.starts_at).toTimeString().slice(0, 5), location: e.location || '',
+        account: e._account,
     };
 }
 async function save() {
@@ -68,20 +76,21 @@ async function save() {
     const startsAt = f.time ? `${f.dateKey}T${f.time}:00` : `${f.dateKey}T00:00:00`;
     const payload = { title: f.title.trim(), starts_at: startsAt, all_day: !f.time, location: f.location || null };
     try {
-        if (f.id) await auth.api().put(`/events/${f.id}`, payload);
-        else await auth.api().post('/events', payload);
+        if (f.id) await auth.api(f.account).put(`/events/${f.id}`, payload);
+        else await auth.api(f.account).post('/events', payload);
         form.value = null;
         load();
     } catch (_) { /* ignore */ }
 }
 async function remove() {
     if (!form.value?.id || !confirm(t('calendar.deleteConfirm'))) return;
-    await auth.api().delete(`/events/${form.value.id}`).catch(() => {});
+    await auth.api(form.value.account).delete(`/events/${form.value.id}`).catch(() => {});
     form.value = null;
     load();
 }
 
 watch(cur, load);
+watch(() => auth.active, load);
 onMounted(load);
 </script>
 
@@ -102,7 +111,10 @@ onMounted(load);
             <div v-for="d in grid" :key="d.key" class="cal-day" :class="{ out: d.out }" @click="openNew(d.key)">
                 <span class="cal-num" :class="{ today: d.today }">{{ d.n }}</span>
                 <div class="cal-evs">
-                    <div v-for="e in eventsOn(d.key)" :key="e.id" class="cal-ev" @click.stop="editEvent(e)">
+                    <div v-for="e in eventsOn(d.key)" :key="e._account + ':' + e.id" class="cal-ev"
+                         :style="auth.isUnified ? { borderLeft: `3px solid ${avatarColor(e._account)}`, paddingLeft: '4px' } : {}"
+                         :title="auth.isUnified ? e._account : ''"
+                         @click.stop="editEvent(e)">
                         <b v-if="timeOf(e)">{{ timeOf(e) }}</b> {{ e.title }}
                     </div>
                 </div>
@@ -112,6 +124,12 @@ onMounted(load);
         <div v-if="form" class="modal-scrim" @click.self="form = null">
             <div class="modal">
                 <h2 class="modal-title">{{ form.id ? t('common.save') : t('calendar.newEvent') }}</h2>
+                <label v-if="auth.isUnified && !form.id" class="fld">
+                    <span>{{ t('compose.from') }}</span>
+                    <select v-model="form.account" class="cal-acc-sel">
+                        <option v-for="a in auth.accounts" :key="a.email" :value="a.email">{{ a.display_name || a.email }}</option>
+                    </select>
+                </label>
                 <label class="fld"><span>{{ t('calendar.eventTitle') }}</span><input v-model="form.title" type="text" /></label>
                 <div class="fld-row">
                     <label class="fld"><span>{{ t('common.today') }}</span><input v-model="form.dateKey" type="date" /></label>
