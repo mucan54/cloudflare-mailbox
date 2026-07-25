@@ -3,12 +3,16 @@
 namespace Tests\Feature;
 
 use App\Jobs\StoreIncomingEmail;
+use App\Models\Attachment;
 use App\Models\CloudflareAccount;
+use App\Models\Email;
 use App\Models\Mailbox;
+use App\Models\SentEmail;
 use App\Notifications\IncomingMailNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -97,6 +101,63 @@ class MailboxApiTest extends TestCase
         $this->assertDatabaseHas('sent_emails', [
             'mailbox_id' => $mailbox->id, 'from_email' => 'me@a.com', 'status' => 'delivered',
         ]);
+    }
+
+    public function test_send_with_attachment_forwards_it_and_stores_a_copy(): void
+    {
+        Http::fake(['*/email/sending/send' => Http::response([
+            'success' => true, 'errors' => [], 'result' => ['delivered' => ['x@y.com'], 'queued' => [], 'permanent_bounces' => []],
+        ])]);
+
+        $mailbox = $this->mailbox();
+        Sanctum::actingAs($mailbox);
+
+        $content = base64_encode('hello file');
+
+        $res = $this->postJson('/api/mailbox/send', [
+            'to' => ['x@y.com'], 'subject' => 'Hey', 'html' => '<p>Hi</p>',
+            'attachments' => [
+                ['filename' => 'note.txt', 'type' => 'text/plain', 'content' => $content, 'size' => 10],
+            ],
+        ])->assertStatus(201);
+
+        // Forwarded to Cloudflare with the base64 content.
+        Http::assertSent(function ($request) use ($content) {
+            return str_contains($request->url(), '/email/sending/send')
+                && ($request['attachments'][0]['filename'] ?? null) === 'note.txt'
+                && ($request['attachments'][0]['content'] ?? null) === $content;
+        });
+
+        // A copy is persisted against the sent message.
+        $this->assertDatabaseHas('attachments', [
+            'attachable_type' => SentEmail::class,
+            'attachable_id' => $res->json('id'),
+            'filename' => 'note.txt',
+        ]);
+    }
+
+    public function test_attachment_download_is_scoped_to_the_mailbox(): void
+    {
+        Storage::fake('local');
+
+        $mailbox = $this->mailbox();
+        $other = $this->mailbox(['email' => 'other@a.com']);
+
+        $email = $mailbox->emails()->create(['cloudflare_account_id' => $mailbox->cloudflare_account_id, 'ingest_key' => 'a1', 'received_at' => now()]);
+        Storage::disk('local')->put('attachments/x/file.txt', 'secret bytes');
+        $att = Attachment::create([
+            'attachable_type' => Email::class, 'attachable_id' => $email->id,
+            'filename' => 'file.txt', 'mime_type' => 'text/plain', 'size' => 12,
+            'storage_disk' => 'local', 'storage_path' => 'attachments/x/file.txt',
+        ]);
+
+        // Owner can download.
+        Sanctum::actingAs($mailbox);
+        $this->get("/api/mailbox/attachments/{$att->id}/download")->assertOk();
+
+        // A different mailbox cannot.
+        Sanctum::actingAs($other);
+        $this->get("/api/mailbox/attachments/{$att->id}/download")->assertForbidden();
     }
 
     public function test_update_profile_persists_display_name_and_signature(): void

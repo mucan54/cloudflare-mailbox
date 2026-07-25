@@ -2,9 +2,12 @@
 
 namespace App\Services\Mail;
 
+use App\Models\Attachment;
 use App\Models\CloudflareAccount;
 use App\Models\Mailbox;
 use App\Models\SentEmail;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
@@ -30,7 +33,7 @@ class EmailSender
 
         $result = $this->driverFor($account)->send($account, $message);
 
-        return SentEmail::create([
+        $sent = SentEmail::create([
             'cloudflare_account_id' => $account->id,
             'domain_id' => $this->resolveDomainId($account, $message['from']),
             'mailbox_id' => $mailbox?->id,
@@ -49,6 +52,47 @@ class EmailSender
             'in_reply_to_email_id' => $input['in_reply_to_email_id'] ?? null,
             'sent_at' => now(),
         ]);
+
+        $this->storeSentAttachments($sent, $message['attachments'] ?? []);
+
+        return $sent;
+    }
+
+    /**
+     * Persist a copy of each outgoing attachment against the SentEmail so it
+     * appears in the Sent view later.
+     *
+     * @param  array<int, array<string, mixed>>  $attachments
+     */
+    protected function storeSentAttachments(SentEmail $sent, array $attachments): void
+    {
+        if (! $attachments) {
+            return;
+        }
+
+        $disk = config('cloudflare.attachments_disk', 'local');
+
+        foreach ($attachments as $a) {
+            $binary = isset($a['content_raw'])
+                ? $a['content_raw']
+                : (! empty($a['content']) ? base64_decode((string) $a['content'], true) : false);
+
+            $path = null;
+            if ($binary !== false && $binary !== null && $binary !== '') {
+                $path = 'attachments/sent/'.$sent->id.'/'.Str::random(8).'-'.($a['filename'] ?? 'file');
+                Storage::disk($disk)->put($path, $binary);
+            }
+
+            Attachment::create([
+                'attachable_type' => SentEmail::class,
+                'attachable_id' => $sent->id,
+                'filename' => $a['filename'] ?? 'attachment',
+                'mime_type' => $a['type'] ?? $a['mime_type'] ?? null,
+                'size' => $a['size'] ?? (is_string($binary) ? strlen($binary) : 0),
+                'storage_disk' => $path ? $disk : null,
+                'storage_path' => $path,
+            ]);
+        }
     }
 
     /**

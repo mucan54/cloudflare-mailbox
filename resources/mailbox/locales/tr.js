@@ -22,6 +22,7 @@ export default {
         title: 'Yeni ileti', from: 'Kimden', to: 'Kime', subject: 'Konu', subjectPh: 'Konu', body: 'Mesajınızı yazın…',
         send: 'Gönder', ccbcc: 'Cc/Bcc', needRecipient: 'En az bir alıcı girin.', failed: 'Gönderilemedi.',
         recipientPh: 'ornek@site.com', origMessage: 'Orijinal ileti', from2: 'Kimden', date: 'Tarih',
+        attach: 'Dosya ekle', attachTooBig: 'Ekler toplamda 4,5 MB’ı aşamaz.',
     },
     login: {
         title: 'Mailbox', addTitle: 'Hesap ekle', sub: 'Mail adresiniz ve şifrenizle giriş yapın.',

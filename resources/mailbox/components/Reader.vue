@@ -39,6 +39,24 @@ async function load() {
 }
 watch(() => [props.id, props.acc, props.type], load, { immediate: true });
 
+// Fetch the attachment through the authenticated API as a blob so downloads
+// work on any storage disk (not just those that mint signed URLs).
+async function download(a) {
+    try {
+        const { data } = await auth.api(account.value).get(`/attachments/${a.id}/download`, { responseType: 'blob' });
+        const url = URL.createObjectURL(data);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = a.filename || 'attachment';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch (_) {
+        // ignore — download failed
+    }
+}
+
 function reply(mode) {
     router.push({ path: '/compose', query: { mode, src: props.id, acc: account.value, type: props.type } });
 }
@@ -122,11 +140,11 @@ defineExpose({ reply, toggleStar, trash, markUnread });
             <div v-if="email.attachments?.length" class="rd-atts">
                 <div class="rd-atts-head">{{ t('mail.attachments') }} <span class="pill">{{ email.attachments.length }}</span></div>
                 <div class="rd-atts-grid">
-                    <a v-for="a in email.attachments" :key="a.id" class="att-card" :href="a.url || '#'" target="_blank">
+                    <button v-for="a in email.attachments" :key="a.id" type="button" class="att-card" @click="download(a)">
                         <span class="att-thumb">📄</span>
                         <span class="att-name">{{ a.filename }}</span>
                         <span class="att-meta">{{ fileKind(a) }} {{ fileSize(a.size) }}</span>
-                    </a>
+                    </button>
                 </div>
             </div>
 

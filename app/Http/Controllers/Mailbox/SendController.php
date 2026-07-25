@@ -79,6 +79,11 @@ class SendController extends Controller
             'html' => ['nullable', 'string'],
             'text' => ['nullable', 'string'],
             'in_reply_to_email_id' => ['nullable', 'integer'],
+            'attachments' => ['nullable', 'array', 'max:20'],
+            'attachments.*.filename' => ['required', 'string', 'max:255'],
+            'attachments.*.type' => ['nullable', 'string', 'max:150'],
+            'attachments.*.content' => ['required', 'string'], // base64-encoded bytes
+            'attachments.*.size' => ['nullable', 'integer'],
         ]);
 
         // The mailbox may only send as itself.
@@ -92,6 +97,7 @@ class SendController extends Controller
             'html' => $data['html'] ?? null,
             'text' => $data['text'] ?? null,
             'in_reply_to_email_id' => $data['in_reply_to_email_id'] ?? null,
+            'attachments' => $data['attachments'] ?? [],
         ], $mailbox);
 
         return response()->json([
