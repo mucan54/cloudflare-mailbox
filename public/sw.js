@@ -49,14 +49,22 @@ self.addEventListener('notificationclick', (event) => {
     event.notification.close();
     const url = (event.notification.data && event.notification.data.url) || '/';
     event.waitUntil(
-        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+        (async () => {
+            const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
             for (const client of clients) {
                 if ('focus' in client) {
-                    client.navigate(url);
-                    return client.focus();
+                    // App already open: navigate in-app (SPA router) for a smooth
+                    // transition instead of a full reload.
+                    client.postMessage({ type: 'open-mail', url });
+                    try {
+                        return await client.focus();
+                    } catch (_) {
+                        return;
+                    }
                 }
             }
+            // App closed: open a new window straight at the message URL.
             return self.clients.openWindow(url);
-        }),
+        })(),
     );
 });
