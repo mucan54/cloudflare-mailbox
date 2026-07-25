@@ -22,7 +22,16 @@ const busy = ref(false);
 const error = ref('');
 const inReplyTo = ref(null);
 
-function addChip(list, inputRef) {
+// Chip helpers are keyed by field name ('to'/'cc'/'bcc'). Passing the ref
+// itself through a template expression doesn't work: Vue auto-unwraps refs in
+// templates, so the handler would receive the plain array and `.value` would be
+// undefined — which is why chip removal silently did nothing.
+const lists = { to, cc, bcc };
+const inputs = { to: toInput, cc: ccInput, bcc: bccInput };
+
+function addChip(field) {
+    const list = lists[field];
+    const inputRef = inputs[field];
     const raw = inputRef.value.trim().replace(/[,;]+$/, '');
     if (!raw) return;
     raw.split(/[,;\s]+/).filter(Boolean).forEach((v) => {
@@ -30,22 +39,20 @@ function addChip(list, inputRef) {
     });
     inputRef.value = '';
 }
-function removeChip(list, i) {
-    list.value.splice(i, 1);
+function removeChip(field, i) {
+    lists[field].value.splice(i, 1);
 }
-function onBackspace(list, inputRef) {
-    if (!inputRef.value && list.value.length) list.value.pop();
+function onBackspace(field) {
+    if (!inputs[field].value && lists[field].value.length) lists[field].value.pop();
 }
-function onKey(e, list, inputRef) {
+function onKey(e, field) {
     if (e.key === ',' || e.key === ';') {
         e.preventDefault();
-        addChip(list, inputRef);
+        addChip(field);
     }
 }
 
 // ----- recipient autocomplete (address book) -----
-const lists = { to, cc, bcc };
-const inputs = { to: toInput, cc: ccInput, bcc: bccInput };
 const suggestions = ref([]);
 const sugFor = ref(null);
 const sugIndex = ref(-1);
@@ -82,7 +89,7 @@ function onEnter(field) {
     if (sugFor.value === field && sugIndex.value >= 0 && suggestions.value[sugIndex.value]) {
         pickSug(field, suggestions.value[sugIndex.value]);
     } else {
-        addChip(lists[field], inputs[field]);
+        addChip(field);
         suggestions.value = [];
     }
 }
@@ -138,9 +145,9 @@ onMounted(async () => {
 });
 
 async function send() {
-    addChip(to, toInput);
-    addChip(cc, ccInput);
-    addChip(bcc, bccInput);
+    addChip('to');
+    addChip('cc');
+    addChip('bcc');
     error.value = '';
     if (!to.value.length) {
         error.value = t('compose.needRecipient');
@@ -192,7 +199,7 @@ async function send() {
             <div class="cp-field">
                 <span class="cp-lab">{{ t('compose.to') }}</span>
                 <div class="chips">
-                    <span v-for="(c, i) in to" :key="c" class="chip-tag">{{ c }} <button type="button" @pointerdown.prevent="removeChip(to, i)">×</button></span>
+                    <span v-for="(c, i) in to" :key="c" class="chip-tag">{{ c }} <button type="button" @pointerdown.prevent="removeChip('to', i)">×</button></span>
                     <input
                         v-model="toInput"
                         class="chip-in"
@@ -207,9 +214,9 @@ async function send() {
                         @keydown.enter.prevent="onEnter('to')"
                         @keydown.down="sugNav('to', 1, $event)"
                         @keydown.up="sugNav('to', -1, $event)"
-                        @keydown="onKey($event, to, toInput)"
-                        @keydown.delete="onBackspace(to, toInput)"
-                        @blur="addChip(to, toInput); hideSug()"
+                        @keydown="onKey($event, 'to')"
+                        @keydown.delete="onBackspace('to')"
+                        @blur="addChip('to'); hideSug()"
                     />
                     <div v-if="sugFor === 'to' && suggestions.length" class="sug">
                         <button v-for="(s, i) in suggestions" :key="s.email" class="sug-item" :class="{ on: i === sugIndex }"
@@ -226,11 +233,11 @@ async function send() {
                 <div class="cp-field">
                     <span class="cp-lab">Cc</span>
                     <div class="chips">
-                        <span v-for="(c, i) in cc" :key="c" class="chip-tag">{{ c }} <button type="button" @pointerdown.prevent="removeChip(cc, i)">×</button></span>
+                        <span v-for="(c, i) in cc" :key="c" class="chip-tag">{{ c }} <button type="button" @pointerdown.prevent="removeChip('cc', i)">×</button></span>
                         <input v-model="ccInput" class="chip-in" type="text" inputmode="email" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="Cc"
                                @input="queryRecipients('cc')" @focus="queryRecipients('cc')"
                                @keydown.enter.prevent="onEnter('cc')" @keydown.down="sugNav('cc', 1, $event)" @keydown.up="sugNav('cc', -1, $event)"
-                               @keydown.delete="onBackspace(cc, ccInput)" @blur="addChip(cc, ccInput); hideSug()" />
+                               @keydown="onKey($event, 'cc')" @keydown.delete="onBackspace('cc')" @blur="addChip('cc'); hideSug()" />
                         <div v-if="sugFor === 'cc' && suggestions.length" class="sug">
                             <button v-for="(s, i) in suggestions" :key="s.email" class="sug-item" :class="{ on: i === sugIndex }" @mousedown.prevent="pickSug('cc', s)" @mouseenter="sugIndex = i">
                                 <span class="sug-name">{{ s.name }}</span><span v-if="s.name !== s.email" class="sug-mail">{{ s.email }}</span>
@@ -241,11 +248,11 @@ async function send() {
                 <div class="cp-field">
                     <span class="cp-lab">Bcc</span>
                     <div class="chips">
-                        <span v-for="(c, i) in bcc" :key="c" class="chip-tag">{{ c }} <button type="button" @pointerdown.prevent="removeChip(bcc, i)">×</button></span>
+                        <span v-for="(c, i) in bcc" :key="c" class="chip-tag">{{ c }} <button type="button" @pointerdown.prevent="removeChip('bcc', i)">×</button></span>
                         <input v-model="bccInput" class="chip-in" type="text" inputmode="email" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="Bcc"
                                @input="queryRecipients('bcc')" @focus="queryRecipients('bcc')"
                                @keydown.enter.prevent="onEnter('bcc')" @keydown.down="sugNav('bcc', 1, $event)" @keydown.up="sugNav('bcc', -1, $event)"
-                               @keydown.delete="onBackspace(bcc, bccInput)" @blur="addChip(bcc, bccInput); hideSug()" />
+                               @keydown="onKey($event, 'bcc')" @keydown.delete="onBackspace('bcc')" @blur="addChip('bcc'); hideSug()" />
                         <div v-if="sugFor === 'bcc' && suggestions.length" class="sug">
                             <button v-for="(s, i) in suggestions" :key="s.email" class="sug-item" :class="{ on: i === sugIndex }" @mousedown.prevent="pickSug('bcc', s)" @mouseenter="sugIndex = i">
                                 <span class="sug-name">{{ s.name }}</span><span v-if="s.name !== s.email" class="sug-mail">{{ s.email }}</span>
