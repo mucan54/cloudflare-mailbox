@@ -20,11 +20,17 @@ class PushController extends Controller
             'contentEncoding' => ['nullable', 'string'],
         ]);
 
-        $request->user()->updatePushSubscription(
-            $data['endpoint'],
-            $data['keys']['p256dh'],
-            $data['keys']['auth'],
-            $data['contentEncoding'] ?? null,
+        // Scoped to THIS mailbox — never touches another mailbox's row for the
+        // same device, so one device stays registered under every account.
+        // (The package's updatePushSubscription would reassign a shared endpoint
+        // to a single owner, starving the other accounts of notifications.)
+        $request->user()->pushSubscriptions()->updateOrCreate(
+            ['endpoint' => $data['endpoint']],
+            [
+                'public_key' => $data['keys']['p256dh'],
+                'auth_token' => $data['keys']['auth'],
+                'content_encoding' => $data['contentEncoding'] ?: 'aes128gcm',
+            ],
         );
 
         return response()->json(['ok' => true]);
@@ -34,7 +40,8 @@ class PushController extends Controller
     {
         $endpoint = $request->validate(['endpoint' => ['required', 'string']])['endpoint'];
 
-        $request->user()->deletePushSubscription($endpoint);
+        // Only remove this mailbox's registration for the device, not others'.
+        $request->user()->pushSubscriptions()->where('endpoint', $endpoint)->delete();
 
         return response()->json(['ok' => true]);
     }

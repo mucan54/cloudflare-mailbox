@@ -288,6 +288,26 @@ class MailboxApiTest extends TestCase
         ]);
     }
 
+    public function test_same_device_registers_under_multiple_mailboxes(): void
+    {
+        $a = $this->mailbox(['email' => 'a@a.com']);
+        $b = $this->mailbox(['email' => 'b@a.com']);
+        $endpoint = 'https://push.example/same-device';
+        $body = ['endpoint' => $endpoint, 'keys' => ['p256dh' => 'k', 'auth' => 't'], 'contentEncoding' => 'aes128gcm'];
+
+        Sanctum::actingAs($a);
+        $this->postJson('/api/mailbox/push-subscribe', $body)->assertOk();
+
+        Sanctum::actingAs($b);
+        $this->postJson('/api/mailbox/push-subscribe', $body)->assertOk();
+
+        // Both mailboxes must keep a subscription for the shared device — the
+        // second subscribe must NOT steal it from the first.
+        $this->assertSame(1, $a->pushSubscriptions()->count(), 'A lost its subscription');
+        $this->assertSame(1, $b->pushSubscriptions()->count(), 'B has no subscription');
+        $this->assertDatabaseCount('push_subscriptions', 2);
+    }
+
     public function test_push_test_reports_no_subscriptions(): void
     {
         $mailbox = $this->mailbox();
