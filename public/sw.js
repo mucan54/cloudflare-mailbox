@@ -1,6 +1,6 @@
 // Mailbox PWA service worker (root scope). Handles install/activate, a tiny
 // app-shell cache, and Web Push notifications.
-const CACHE = 'mailbox-v6';
+const CACHE = 'mailbox-v7';
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
@@ -26,35 +26,43 @@ self.addEventListener('push', (event) => {
     } catch (_) {
         payload = { title: 'Yeni mail' };
     }
-    // Update the app-icon badge (Badging API) so a closed PWA still shows the
-    // unread count the notification carried.
-    const unread = payload.data && payload.data.unread;
-    if (typeof unread === 'number' && self.navigator) {
-        try {
-            if (unread > 0 && self.navigator.setAppBadge) self.navigator.setAppBadge(unread);
-            else if (self.navigator.clearAppBadge) self.navigator.clearAppBadge();
-        } catch (_) {
-            // ignore
-        }
-    }
 
-    event.waitUntil(
-        Promise.all([
-            self.registration.showNotification(payload.title || 'Yeni mail', {
+    event.waitUntil((async () => {
+        // Show the notification FIRST and await it. iOS penalises/revokes push
+        // permission when a push doesn't yield a user-visible notification, so
+        // this must always run and must never be blocked (or made to reject) by
+        // the best-effort work below.
+        try {
+            await self.registration.showNotification(payload.title || 'Yeni mail', {
                 body: payload.body || '',
                 icon: payload.icon || '/icons/icon-192.png',
                 badge: payload.badge || '/icons/icon-192.png',
                 tag: payload.tag,
                 data: payload.data || {},
-            }),
-            // Tell any open page to refresh instantly — real-time without polling.
-            self.clients
-                .matchAll({ type: 'window', includeUncontrolled: true })
-                .then((clients) => {
-                    clients.forEach((c) => c.postMessage({ type: 'new-mail', data: payload.data || {} }));
-                }),
-        ]),
-    );
+            });
+        } catch (_) {
+            // ignore
+        }
+
+        // App-icon badge (best-effort).
+        const unread = payload.data && payload.data.unread;
+        if (typeof unread === 'number' && self.navigator) {
+            try {
+                if (unread > 0 && self.navigator.setAppBadge) await self.navigator.setAppBadge(unread);
+                else if (self.navigator.clearAppBadge) await self.navigator.clearAppBadge();
+            } catch (_) {
+                // ignore
+            }
+        }
+
+        // Ping open pages to refresh instantly (best-effort).
+        try {
+            const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+            clients.forEach((c) => c.postMessage({ type: 'new-mail', data: payload.data || {} }));
+        } catch (_) {
+            // ignore
+        }
+    })());
 });
 
 self.addEventListener('notificationclick', (event) => {

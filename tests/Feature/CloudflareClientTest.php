@@ -121,6 +121,29 @@ class CloudflareClientTest extends TestCase
             && $request['from'] === 'me@domain.com');
     }
 
+    public function test_list_suppressions_returns_result(): void
+    {
+        Http::fake([
+            '*/email/sending/suppressions' => Http::response($this->ok([
+                ['id' => 's1', 'email' => 'bad@example.com', 'reason' => 'spam_complaint'],
+            ])),
+        ]);
+
+        $rows = (new CloudflareClient('tok', 'acc'))->listSuppressions();
+
+        $this->assertSame('bad@example.com', $rows[0]['email']);
+    }
+
+    public function test_delete_suppression_hits_encoded_path(): void
+    {
+        Http::fake(['*' => Http::response($this->ok([]))]);
+
+        (new CloudflareClient('tok', 'acc'))->deleteSuppression('bad@example.com');
+
+        Http::assertSent(fn ($request) => $request->method() === 'DELETE'
+            && str_contains($request->url(), '/accounts/acc/email/sending/suppressions/bad%40example.com'));
+    }
+
     public function test_api_error_throws_cloudflare_exception(): void
     {
         Http::fake([

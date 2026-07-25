@@ -42,7 +42,7 @@ class IncomingMailNotification extends Notification
         return (new WebPushMessage)
             ->title($from ?: 'Yeni mail')
             ->icon('/icons/icon-192.png')
-            ->badge('/icons/badge.png')
+            ->badge('/icons/icon-192.png')
             ->body(Str::limit($this->email->subject ?: '(konu yok)', 80))
             ->tag('mail-'.$this->email->id)
             ->data([

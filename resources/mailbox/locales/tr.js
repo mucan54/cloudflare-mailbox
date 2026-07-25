@@ -66,5 +66,8 @@ export default {
         currentPassword: 'Mevcut şifre', newPassword: 'Yeni şifre', confirmPassword: 'Yeni şifre (tekrar)',
         changePassword: 'Şifreyi değiştir', pwChanged: 'Şifre değiştirildi', pwMismatch: 'Yeni şifreler eşleşmiyor.',
         open: 'Profil ve ayarlar', edit: 'Düzenle',
+        notifications: 'Bildirimler', notifHint: 'Bu cihaza bir test bildirimi göndererek push’un çalışıp çalışmadığını kontrol edin.',
+        testPush: 'Test bildirimi gönder', testSent: '{n} cihaza gönderildi ✅', testFailed: 'Bildirim gönderilemedi.',
+        testNoSub: 'Bu cihaz kayıtlı değil — önce bildirime izin verin.', notifBlocked: 'Bildirim izni verilmemiş.', testNoVapid: 'Sunucuda VAPID anahtarı yok.',
     },
 };

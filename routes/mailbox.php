@@ -38,6 +38,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/push-subscribe', [PushController::class, 'subscribe']);
     Route::delete('/push-subscribe', [PushController::class, 'unsubscribe']);
+    Route::post('/push-test', [PushController::class, 'test']);
 
     // Calendar, contacts, tasks (per-mailbox PIM)
     Route::get('/events', [EventController::class, 'index']);
