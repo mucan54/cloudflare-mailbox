@@ -63,6 +63,7 @@ class EmailSender
 
         return array_filter([
             'from' => $input['from'],
+            'from_name' => $input['from_name'] ?? null,
             'to' => $this->arr($input['to'] ?? []),
             'cc' => $this->arr($input['cc'] ?? []),
             'bcc' => $this->arr($input['bcc'] ?? []),

@@ -20,7 +20,7 @@ class Mailbox extends Authenticatable implements AuthenticatableContract
     use HasApiTokens, HasPushSubscriptions, Notifiable;
 
     protected $fillable = [
-        'cloudflare_account_id', 'domain_id', 'email', 'display_name',
+        'cloudflare_account_id', 'domain_id', 'email', 'display_name', 'signature',
         'password', 'login_enabled', 'last_login_at',
     ];
 

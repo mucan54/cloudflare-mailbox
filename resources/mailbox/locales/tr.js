@@ -57,4 +57,13 @@ export default {
         title: 'Görevlerim', addPh: 'Görev ekleyin ve Enter’a basın', add: 'Ekle', open: '{n} açık',
         empty: 'Görev yok. İlk görevini ekle.', due: 'Bitiş', done: 'Tamamlandı',
     },
+    profile: {
+        title: 'Profil ve ayarlar', account: 'Hesap', displayName: 'Görünen ad',
+        displayNamePh: 'Ad Soyad', signature: 'İmza',
+        signaturePh: 'Giden maillerin altına eklenecek imza…', appendSignature: 'Yeni maillere imzayı ekle',
+        save: 'Kaydet', saved: 'Profil kaydedildi', password: 'Şifre değiştir',
+        currentPassword: 'Mevcut şifre', newPassword: 'Yeni şifre', confirmPassword: 'Yeni şifre (tekrar)',
+        changePassword: 'Şifreyi değiştir', pwChanged: 'Şifre değiştirildi', pwMismatch: 'Yeni şifreler eşleşmiyor.',
+        open: 'Profil ve ayarlar', edit: 'Düzenle',
+    },
 };

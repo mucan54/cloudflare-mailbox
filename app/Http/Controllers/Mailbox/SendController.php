@@ -84,6 +84,7 @@ class SendController extends Controller
         // The mailbox may only send as itself.
         $sent = $sender->send($mailbox->account, [
             'from' => $mailbox->email,
+            'from_name' => $mailbox->display_name,
             'to' => $data['to'],
             'cc' => $data['cc'] ?? [],
             'bcc' => $data['bcc'] ?? [],

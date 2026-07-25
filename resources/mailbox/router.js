@@ -8,6 +8,7 @@ import Compose from './views/Compose.vue';
 import Calendar from './views/Calendar.vue';
 import People from './views/People.vue';
 import Tasks from './views/Tasks.vue';
+import Settings from './views/Settings.vue';
 
 const routes = [
     { path: '/login', component: Login, meta: { guest: true } },
@@ -18,6 +19,7 @@ const routes = [
     { path: '/calendar', component: Calendar },
     { path: '/people', component: People },
     { path: '/tasks', component: Tasks },
+    { path: '/settings', component: Settings },
 ];
 
 const router = createRouter({

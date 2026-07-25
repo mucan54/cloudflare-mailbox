@@ -99,6 +99,45 @@ class MailboxApiTest extends TestCase
         ]);
     }
 
+    public function test_update_profile_persists_display_name_and_signature(): void
+    {
+        $mailbox = $this->mailbox();
+        Sanctum::actingAs($mailbox);
+
+        $this->putJson('/api/mailbox/me', [
+            'display_name' => 'Jane Doe',
+            'signature' => "--\nJane Doe\nAcme Inc.",
+        ])->assertOk()->assertJson(['mailbox' => [
+            'display_name' => 'Jane Doe',
+            'signature' => "--\nJane Doe\nAcme Inc.",
+        ]]);
+
+        $this->assertDatabaseHas('mailboxes', [
+            'id' => $mailbox->id,
+            'display_name' => 'Jane Doe',
+            'signature' => "--\nJane Doe\nAcme Inc.",
+        ]);
+    }
+
+    public function test_send_includes_sender_display_name(): void
+    {
+        Http::fake(['*/email/sending/send' => Http::response([
+            'success' => true, 'errors' => [], 'result' => ['delivered' => ['x@y.com'], 'queued' => [], 'permanent_bounces' => []],
+        ])]);
+
+        $mailbox = $this->mailbox(['display_name' => 'Jane Doe']);
+        Sanctum::actingAs($mailbox);
+
+        $this->postJson('/api/mailbox/send', [
+            'to' => ['x@y.com'], 'subject' => 'Hey', 'html' => '<p>Hi</p>',
+        ])->assertStatus(201);
+
+        Http::assertSent(function ($request) {
+            return str_contains($request->url(), '/email/sending/send')
+                && $request['from'] === ['address' => 'me@a.com', 'name' => 'Jane Doe'];
+        });
+    }
+
     public function test_inbox_folders_filter(): void
     {
         $mailbox = $this->mailbox();

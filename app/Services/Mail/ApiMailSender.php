@@ -70,8 +70,17 @@ class ApiMailSender implements MailSender
      */
     protected function toApiPayload(array $message): array
     {
+        // Include the sender's display name so the recipient sees a name, not a
+        // bare address. Cloudflare's REST schema takes a {address, name} object
+        // (named-address support, 2026-05); a plain string stays backward
+        // compatible when there is no display name.
+        $from = $message['from'] ?? null;
+        if ($from && filled($message['from_name'] ?? null)) {
+            $from = ['address' => $from, 'name' => $message['from_name']];
+        }
+
         $payload = array_filter([
-            'from' => $message['from'] ?? null,
+            'from' => $from,
             'to' => $message['to'] ?? null,
             'cc' => $message['cc'] ?? null,
             'bcc' => $message['bcc'] ?? null,

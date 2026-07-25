@@ -57,4 +57,13 @@ export default {
         title: 'My tasks', addPh: 'Add a task and press Enter', add: 'Add', open: '{n} open',
         empty: 'No tasks. Add your first one.', due: 'Due', done: 'Done',
     },
+    profile: {
+        title: 'Profile & settings', account: 'Account', displayName: 'Display name',
+        displayNamePh: 'Full name', signature: 'Signature',
+        signaturePh: 'Signature appended to outgoing mail…', appendSignature: 'Append signature to new messages',
+        save: 'Save', saved: 'Profile saved', password: 'Change password',
+        currentPassword: 'Current password', newPassword: 'New password', confirmPassword: 'New password (again)',
+        changePassword: 'Change password', pwChanged: 'Password changed', pwMismatch: 'New passwords do not match.',
+        open: 'Profile & settings', edit: 'Edit',
+    },
 };
