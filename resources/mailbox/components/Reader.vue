@@ -109,7 +109,7 @@ defineExpose({ reply, toggleStar, trash, markUnread });
 <template>
     <div class="rd">
         <header class="rd-bar">
-            <button class="ghost-ic" :title="embedded ? t('common.close') : t('common.back')" @click="embedded ? emit('close') : router.back()">
+            <button class="ghost-ic" :title="embedded ? t('common.close') : t('common.back')" @click="emit('close')">
                 <svg v-if="!embedded" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <svg v-else viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
             </button>
