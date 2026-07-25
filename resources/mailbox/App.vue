@@ -163,7 +163,13 @@ onBeforeUnmount(() => {
             </div>
         </aside>
 
-        <main class="main"><router-view /></main>
+        <main class="main">
+            <router-view v-slot="{ Component }">
+                <transition name="view" mode="out-in">
+                    <component :is="Component" :key="route.fullPath" />
+                </transition>
+            </router-view>
+        </main>
 
         <!-- Mobile bottom nav -->
         <nav v-if="!hideNav" class="tabbar">
@@ -215,5 +221,9 @@ onBeforeUnmount(() => {
         </transition>
     </div>
 
-    <router-view v-else />
+    <router-view v-else v-slot="{ Component }">
+        <transition name="view" mode="out-in">
+            <component :is="Component" :key="route.fullPath" />
+        </transition>
+    </router-view>
 </template>
