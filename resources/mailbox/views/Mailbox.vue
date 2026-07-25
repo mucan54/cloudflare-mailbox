@@ -1,3 +1,9 @@
+<script>
+// Module-scoped so the last-loaded list for each folder survives navigating to
+// a message and back (keyed by account + folder).
+const listCache = new Map();
+</script>
+
 <script setup>
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
@@ -96,12 +102,24 @@ async function fetchAll() {
 }
 
 async function load() {
-    loading.value = true;
+    // Show the last list for this folder instantly (no loading flash) when
+    // returning from a message, then refresh it in the background. This makes
+    // back-from-detail feel smooth instead of a full reload.
+    const key = ui.search ? null : `${auth.active}:${props.folder}`;
+    const cached = key ? listCache.get(key) : null;
+    if (cached && cached.length) {
+        emails.value = cached;
+        loading.value = false;
+    } else {
+        loading.value = true;
+    }
     try {
-        emails.value = await fetchAll();
+        const fresh = await fetchAll();
+        emails.value = fresh;
+        if (key) listCache.set(key, fresh);
         newCount.value = 0;
     } catch (_) {
-        emails.value = [];
+        if (!cached) emails.value = [];
     } finally {
         loading.value = false;
     }
@@ -166,11 +184,12 @@ function fmt(iso) {
 function open(e) {
     cursor.value = visible.value.indexOf(e);
     const type = typeOf(e);
+    // Optimistically mark read so the cached list shows it read on return.
+    if (type !== 'sent') e.read = true;
     if (paneMode.value) {
         selectedId.value = e.id;
         selectedAcc.value = e._account;
         selectedType.value = type;
-        if (type !== 'sent') e.read = true;
     } else {
         router.push({ path: `/mail/${e.id}`, query: { acc: e._account, type } });
     }

@@ -91,8 +91,9 @@ let unreadTimer = null;
 function onSwMessage(e) {
     if (e.data?.type === 'new-mail') {
         // A push just arrived — pull the new mail into the list immediately so
-        // it's there whether or not the user taps the notification.
-        auth.refreshUnread().catch(() => {});
+        // it's there whether or not the user taps the notification, and refresh
+        // the badge from the real total.
+        syncUnread();
         window.dispatchEvent(new CustomEvent('mailbox:new-mail'));
     }
     if (e.data?.type === 'open-mail' && e.data.url) openFromNotification(e.data.url);
@@ -123,11 +124,24 @@ function setAppBadge(n) {
         // Badging unsupported or blocked — ignore.
     }
 }
+// Only touch the badge once we've actually loaded unread counts. Acting on the
+// stale initial value (usually 0) would CLEAR a badge the service worker just
+// set from an incoming push, making it look like badging doesn't work.
+const unreadLoaded = ref(false);
 watch(() => auth.totalUnread, (n) => {
     document.title = n > 0 ? `(${n}) Mailbox` : 'Mailbox';
-    setAppBadge(n);
-}, { immediate: true });
+    if (unreadLoaded.value) setAppBadge(n);
+});
 watch(() => auth.accounts.length, () => enablePushIfGranted(auth.accounts).catch(() => {}));
+
+// Refresh unread counts, then update the badge from the real total.
+function syncUnread() {
+    return auth.refreshUnread().then(() => {
+        unreadLoaded.value = true;
+        setAppBadge(auth.totalUnread);
+    }).catch(() => {});
+}
+
 // Refresh the push subscription when the app is reopened/refocused — push
 // endpoints rotate and can go stale while the app is backgrounded, which is a
 // common cause of "notifications just stopped".
@@ -135,7 +149,7 @@ function onVisible() {
     if (document.visibilityState !== 'visible') return;
     refreshPushPermission();
     if (!auth.isAuthenticated) return;
-    auth.refreshUnread().catch(() => {});
+    syncUnread();
     enablePushIfGranted(auth.accounts).catch(() => {});
 }
 onMounted(() => {
@@ -143,10 +157,10 @@ onMounted(() => {
     if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', onSwMessage);
     document.addEventListener('visibilitychange', onVisible);
     if (auth.isAuthenticated) {
-        auth.refreshUnread().catch(() => {});
+        syncUnread();
         enablePushIfGranted(auth.accounts).catch(() => {});
         unreadTimer = setInterval(() => {
-            if (auth.isAuthenticated && document.visibilityState === 'visible') auth.refreshUnread().catch(() => {});
+            if (auth.isAuthenticated && document.visibilityState === 'visible') syncUnread();
         }, 30000);
     }
 });
