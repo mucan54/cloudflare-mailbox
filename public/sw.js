@@ -1,10 +1,38 @@
 // Mailbox PWA service worker (root scope). Handles install/activate, a tiny
 // app-shell cache, and Web Push notifications.
-const CACHE = 'mailbox-v8';
+const CACHE = 'mailbox-v9';
+const SHELL = '/';
+
+// Precache every hashed asset of the current build (from the Vite manifest) so
+// a resumed PWA always has a COMPLETE, consistent cache — shell + its assets —
+// and can boot instantly offline. This is what stops the white screen when iOS
+// reloads the app on resume from the background.
+async function precacheBuild(cache) {
+    try {
+        const res = await fetch('/build/manifest.json', { cache: 'no-cache' });
+        if (!res.ok) return false;
+        const manifest = await res.json();
+        const urls = new Set();
+        for (const key in manifest) {
+            const entry = manifest[key];
+            if (entry && entry.file) urls.add('/build/' + entry.file);
+            if (entry && Array.isArray(entry.css)) entry.css.forEach((c) => urls.add('/build/' + c));
+        }
+        if (urls.size) await cache.addAll([...urls]);
+        return true;
+    } catch (_) {
+        // Ignore — assets are still cached on demand by the fetch handler.
+        return false;
+    }
+}
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
-    event.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/'])).catch(() => {}));
+    event.waitUntil((async () => {
+        const cache = await caches.open(CACHE);
+        await cache.add(SHELL).catch(() => {});
+        await precacheBuild(cache);
+    })());
 });
 
 self.addEventListener('activate', (event) => {
@@ -25,15 +53,27 @@ self.addEventListener('fetch', (event) => {
     if (url.origin !== self.location.origin) return; // leave cross-origin alone
     if (url.pathname.startsWith('/api/')) return; // never cache the API
 
-    // Page navigations: network-first so a fresh deploy loads immediately; fall
-    // back to the cached shell only when genuinely offline.
+    // Page navigations: serve the cached shell IMMEDIATELY, revalidate in the
+    // background. iOS reloads the PWA when it's resumed from the background, and
+    // a network-first await here would hang on the flaky just-resumed network,
+    // leaving a white screen until it resolved. Cache-first boots instantly; the
+    // fresh index and its assets are refreshed in the background for next time.
     if (req.mode === 'navigate') {
         event.respondWith((async () => {
-            try {
-                return await fetch(req);
-            } catch (_) {
-                return (await caches.match('/')) || Response.error();
-            }
+            const cached = await caches.match(SHELL);
+            const network = fetch(req)
+                .then(async (res) => {
+                    if (res && res.ok && res.type === 'basic') {
+                        // Cache the new assets first, then the shell — so the
+                        // stored shell always has matching assets (never a shell
+                        // that points at assets we failed to cache).
+                        const cache = await caches.open(CACHE);
+                        if (await precacheBuild(cache)) cache.put(SHELL, res.clone()).catch(() => {});
+                    }
+                    return res;
+                })
+                .catch(() => null);
+            return cached || (await network) || Response.error();
         })());
         return;
     }
