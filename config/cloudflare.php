@@ -32,6 +32,9 @@ return [
     'sending' => [
         'driver' => env('CLOUDFLARE_SEND_DRIVER', 'api'),
         'max_bytes' => 5 * 1024 * 1024, // 5 MiB hard limit (incl. attachments)
+        // Account-relative path for the Email Sending suppression list. Kept
+        // configurable in case Cloudflare versions the endpoint per account.
+        'suppressions_path' => env('CLOUDFLARE_SUPPRESSIONS_PATH', 'email/sending/suppressions'),
     ],
 
     /*

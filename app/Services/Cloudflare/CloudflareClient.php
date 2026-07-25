@@ -273,4 +273,41 @@ class CloudflareClient
     {
         return $this->post("/accounts/{$this->accountId}/email/sending/send", $message)['result'] ?? [];
     }
+
+    // --- Suppression list -------------------------------------------------
+    // Addresses Cloudflare refuses to send to after hard bounces / spam
+    // complaints. The base path is config-overridable in case Cloudflare
+    // versions it differently for an account.
+
+    protected function suppressionsPath(): string
+    {
+        $base = config('cloudflare.sending.suppressions_path', 'email/sending/suppressions');
+
+        return "/accounts/{$this->accountId}/{$base}";
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function listSuppressions(): array
+    {
+        return $this->get($this->suppressionsPath())['result'] ?? [];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function addSuppression(string $email): array
+    {
+        return $this->post($this->suppressionsPath(), ['email' => $email])['result'] ?? [];
+    }
+
+    /**
+     * Remove one suppression. Cloudflare keys these by id; some responses use
+     * the address itself — the caller passes whichever the list row exposed.
+     */
+    public function deleteSuppression(string $idOrEmail): void
+    {
+        $this->delete($this->suppressionsPath().'/'.rawurlencode($idOrEmail));
+    }
 }

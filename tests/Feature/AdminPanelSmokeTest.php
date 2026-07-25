@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Cloudflare\WorkerDeployer;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class AdminPanelSmokeTest extends TestCase
@@ -32,6 +33,23 @@ class AdminPanelSmokeTest extends TestCase
         $this->actingAs($user)
             ->get("/admin/{$account->slug}/domains")
             ->assertSuccessful();
+    }
+
+    public function test_suppressions_page_renders_with_api_rows(): void
+    {
+        Http::fake([
+            '*/email/sending/suppressions' => Http::response([
+                'success' => true, 'errors' => [], 'messages' => [],
+                'result' => [['id' => 's1', 'email' => 'bad@example.com', 'reason' => 'spam_complaint']],
+            ]),
+        ]);
+
+        [$user, $account] = $this->tenantUser();
+
+        $this->actingAs($user)
+            ->get("/admin/{$account->slug}/suppressions")
+            ->assertSuccessful()
+            ->assertSee('bad@example.com');
     }
 
     public function test_dashboard_renders(): void
