@@ -6,10 +6,53 @@ use App\Http\Controllers\Controller;
 use App\Models\Email;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Symfony\Component\Mime\Address;
+use Symfony\Component\Mime\Email as MimeEmail;
 
 class InboxController extends Controller
 {
+    /**
+     * The full RFC822 message, rebuilt from the stored parts. Used by the
+     * optional IMAP bridge (FETCH BODY[]) so native mail apps can render it.
+     */
+    public function raw(Request $request, int $email): Response
+    {
+        $e = $request->user()->emails()->with('attachments')->findOrFail($email);
+
+        $from = filter_var($e->from_email, FILTER_VALIDATE_EMAIL) ?: 'unknown@localhost';
+        $to = filter_var($e->to_email, FILTER_VALIDATE_EMAIL) ?: $request->user()->email;
+
+        $mime = (new MimeEmail)
+            ->from(new Address($from, (string) ($e->from_name ?? '')))
+            ->to($to)
+            ->subject((string) ($e->subject ?? ''));
+
+        if ($e->received_at) {
+            $mime->date($e->received_at);
+        }
+        foreach ((array) $e->cc as $cc) {
+            if (filter_var($cc, FILTER_VALIDATE_EMAIL)) {
+                $mime->addCc($cc);
+            }
+        }
+        if ($e->text_body) {
+            $mime->text($e->text_body);
+        }
+        if ($e->html_body) {
+            $mime->html($e->html_body);
+        }
+        foreach ($e->attachments as $a) {
+            if ($a->storage_disk && $a->storage_path && Storage::disk($a->storage_disk)->exists($a->storage_path)) {
+                $mime->attach(Storage::disk($a->storage_disk)->get($a->storage_path), $a->filename, $a->mime_type);
+            }
+        }
+
+        return response($mime->toString(), 200, ['Content-Type' => 'message/rfc822']);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $query = $request->user()->emails()->latest('received_at');

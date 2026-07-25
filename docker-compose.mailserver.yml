@@ -1,0 +1,22 @@
+# OPTIONAL — native-mail (IMAP + SMTP) bridge only.
+#
+# The main app does NOT need this. Use it only to enable Apple Mail / Outlook /
+# Thunderbird access. Run with:
+#   docker compose -f docker-compose.mailserver.yml up -d
+services:
+  mailserver:
+    build: ./mailserver
+    restart: unless-stopped
+    ports:
+      - "587:587"   # SMTP submission (STARTTLS)
+      - "993:993"   # IMAP over TLS
+    environment:
+      LARAVEL_API_URL: ${LARAVEL_API_URL:-https://mailbox.mucan.dev}
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-mail.mucan.dev}
+      SMTP_ADDR: ":587"
+      IMAP_ADDR: ":993"
+      # Mount your TLS cert/key and point these at them (strongly recommended):
+      TLS_CERT: ${TLS_CERT:-}
+      TLS_KEY: ${TLS_KEY:-}
+    volumes:
+      - ${TLS_DIR:-./certs}:/certs:ro

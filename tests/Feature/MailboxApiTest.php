@@ -161,6 +161,24 @@ class MailboxApiTest extends TestCase
         $this->get("/api/mailbox/attachments/{$att->id}/download")->assertForbidden();
     }
 
+    public function test_raw_message_is_rebuilt_as_rfc822(): void
+    {
+        $mailbox = $this->mailbox();
+        $email = $mailbox->emails()->create([
+            'cloudflare_account_id' => $mailbox->cloudflare_account_id, 'ingest_key' => 'r1',
+            'from_email' => 'sender@x.com', 'from_name' => 'Sender', 'to_email' => 'me@a.com',
+            'subject' => 'Hello IMAP', 'text_body' => 'Body text', 'received_at' => now(),
+        ]);
+
+        Sanctum::actingAs($mailbox);
+        $res = $this->get("/api/mailbox/emails/{$email->id}/raw");
+
+        $res->assertOk();
+        $this->assertStringContainsString('message/rfc822', $res->headers->get('Content-Type'));
+        $res->assertSee('Subject: Hello IMAP', false);
+        $res->assertSee('sender@x.com', false);
+    }
+
     public function test_update_profile_persists_display_name_and_signature(): void
     {
         $mailbox = $this->mailbox();
