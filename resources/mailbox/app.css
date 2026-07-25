@@ -179,7 +179,6 @@ svg { width: 100%; height: 100%; display: block; }
 .mb-group { padding: 12px 14px 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--brand); position: sticky; top: 0; background: var(--panel); z-index: 1; }
 
 .mb-row { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px 9px 10px; cursor: pointer; position: relative; border-bottom: 1px solid var(--line); }
-.mb-row:hover { background: var(--panel-2); }
 .mb-row.active { background: var(--brand-100); }
 .mb-row.picked { background: var(--brand-050); }
 .mb-row.unread::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 0 2px 2px 0; background: var(--brand); }
@@ -189,8 +188,7 @@ svg { width: 100%; height: 100%; display: block; }
 .mb-check { position: relative; width: 34px; height: 34px; flex: none; }
 .mb-ava { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 50%; color: #fff; font-weight: 600; font-size: 13px; }
 .mb-tick { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 50%; background: var(--brand); color: #fff; opacity: 0; transition: opacity .1s; }
-.mb-check.on .mb-tick, .mb-row:hover .mb-check .mb-tick { opacity: 1; }
-.mb-check.on .mb-tick { background: var(--brand); }
+.mb-check.on .mb-tick { opacity: 1; background: var(--brand); }
 
 .mb-body { flex: 1; min-width: 0; }
 .mb-line1 { display: flex; align-items: baseline; gap: 8px; }
@@ -206,8 +204,19 @@ svg { width: 100%; height: 100%; display: block; }
 .mb-side { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 2px; }
 .mb-star { font-size: 17px; color: #c8c6c4; }
 .mb-star.on { color: var(--star); }
-.mb-trash { font-size: 14px; opacity: 0; }
-.mb-row:hover .mb-trash { opacity: .6; }
+/* Touch devices have no hover — keep the trash affordance visible. Pointer
+   (mouse) devices reveal it on row hover instead (see @media hover below). */
+.mb-trash { font-size: 14px; opacity: .5; }
+
+/* Hover-only affordances. Gated so iOS/touch never enters a "sticky hover"
+   state where the first tap only reveals hover styles (showing the select
+   tick) and a second tap is needed to actually open the row. */
+@media (hover: hover) and (pointer: fine) {
+    .mb-row:hover { background: var(--panel-2); }
+    .mb-row:hover .mb-check .mb-tick { opacity: 1; }
+    .mb-trash { opacity: 0; }
+    .mb-row:hover .mb-trash { opacity: .6; }
+}
 
 .mb-status { flex: none; height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 14px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); background: var(--panel-2); }
 .dotsep { opacity: .5; }
