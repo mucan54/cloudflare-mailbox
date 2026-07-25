@@ -99,10 +99,19 @@ function quote(o) {
         + (o.text_body || (o.html_body ? o.html_body.replace(/<[^>]+>/g, '') : ''));
 }
 
+function sigBlock(email) {
+    const s = auth.accountByEmail(email)?.signature || '';
+    return s ? `\n\n${s}` : '';
+}
+
 onMounted(async () => {
     const { mode, src, acc, type } = route.query;
     if (route.query.to) to.value = String(route.query.to).split(/[,;\s]+/).filter(Boolean);
-    if (!mode || !src) return;
+    if (!mode || !src) {
+        // brand new message → start with the sender's signature
+        body.value = sigBlock(from.value);
+        return;
+    }
     let orig;
     try {
         const { data } = await auth.api(acc).get(type === 'sent' ? `/sent/${src}` : `/emails/${src}`);
@@ -112,6 +121,7 @@ onMounted(async () => {
     }
     from.value = acc || from.value;
     inReplyTo.value = type === 'sent' ? null : Number(src);
+    const sig = sigBlock(from.value);
 
     if (mode === 'reply' || mode === 'replyAll') {
         if (orig.from_email) to.value = [orig.from_email];
@@ -120,10 +130,10 @@ onMounted(async () => {
             cc.value = orig.cc.filter((a) => a !== from.value);
             showCc.value = cc.value.length > 0;
         }
-        body.value = quote(orig);
+        body.value = sig + quote(orig);
     } else if (mode === 'forward') {
         subject.value = `Fwd: ${stripPrefix(orig.subject)}`;
-        body.value = quote(orig);
+        body.value = sig + quote(orig);
     }
 });
 

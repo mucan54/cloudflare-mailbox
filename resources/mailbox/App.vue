@@ -48,7 +48,13 @@ const currentApp = computed(() => apps.value.find((a) => a.match(route.path))?.k
 const isMail = computed(() => currentApp.value === 'mail');
 const currentFolder = computed(() => route.params.folder || 'inbox');
 const onFolder = computed(() => route.path.startsWith('/f/'));
-const hideNav = computed(() => route.path.startsWith('/mail/') || route.path === '/compose');
+const hideNav = computed(() => route.path.startsWith('/mail/') || route.path === '/compose' || route.path === '/settings');
+
+function openSettings() {
+    settingsOpen.value = false;
+    sheetOpen.value = false;
+    router.push('/settings');
+}
 
 function goApp(a) { router.push(a.to); }
 function go(key) { router.push(`/f/${key}`); }
@@ -122,6 +128,7 @@ onBeforeUnmount(() => {
                 <div class="tb-menuwrap">
                     <button class="tb-ic" @click="settingsOpen = !settingsOpen">⚙</button>
                     <div v-if="settingsOpen" class="tb-menu" @click.outside="settingsOpen = false">
+                        <button class="tb-menu-link" @click="openSettings">⚙ {{ t('profile.open') }}</button>
                         <div class="tb-menu-cap">{{ t('settings.language') }}</div>
                         <div class="seg">
                             <button v-for="l in AVAILABLE" :key="l.code" :class="{ on: i18n.locale === l.code }" @click="setLocale(l.code)">{{ l.label }}</button>
@@ -221,6 +228,7 @@ onBeforeUnmount(() => {
                         </button>
                         <button class="acct-signout" :title="t('account.signOut')" @click="signOut(a.email)">⏻</button>
                     </div>
+                    <button class="acct-add" @click="openSettings">⚙ {{ t('profile.open') }}</button>
                     <button class="acct-add" @click="addAccount">{{ t('account.add') }}</button>
                     <button v-if="canPrompt" class="acct-add notif" @click="enableNotifications">{{ t('notif.enable') }}</button>
                     <p v-else-if="notifState === 'denied'" class="notif-hint">{{ t('notif.blocked') }}</p>

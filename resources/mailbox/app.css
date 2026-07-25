@@ -432,3 +432,16 @@ svg { width: 100%; height: 100%; display: block; }
     #mailbox-app textarea,
     #mailbox-app select { font-size: 16px; }
 }
+
+/* ===== SETTINGS / PROFILE ===== */
+.settings { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
+.settings-body { flex: 1; overflow-y: auto; padding: 16px; max-width: 640px; width: 100%; margin: 0 auto; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+.card-title { font-size: 15px; font-weight: 600; margin: 0 0 12px; }
+.settings .fld { margin-bottom: 12px; }
+.settings .fld input, .settings .fld select { height: 38px; }
+.set-area { padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); outline: none; color: var(--text); font-family: inherit; font-size: 14px; resize: vertical; }
+.set-area:focus { border-color: var(--brand); }
+.settings-actions { display: flex; justify-content: flex-end; margin-top: 4px; }
+.tb-menu-link { width: 100%; text-align: left; padding: 8px 6px; border-radius: 6px; font-size: 13px; color: var(--text); }
+.tb-menu-link:hover { background: var(--panel-2); }

@@ -24,7 +24,7 @@ class OutboundMail extends Mailable
         $m = $this->message;
 
         return new Envelope(
-            from: new Address($m['from']),
+            from: new Address($m['from'], $m['from_name'] ?? null),
             to: $this->addresses($m['to'] ?? []),
             cc: $this->addresses($m['cc'] ?? []),
             bcc: $this->addresses($m['bcc'] ?? []),

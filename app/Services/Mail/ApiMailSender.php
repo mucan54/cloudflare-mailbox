@@ -70,8 +70,15 @@ class ApiMailSender implements MailSender
      */
     protected function toApiPayload(array $message): array
     {
+        // Include the sender's display name (RFC 5322 "Name <email>") so the
+        // recipient sees a name, not a bare address.
+        $from = $message['from'] ?? null;
+        if ($from && filled($message['from_name'] ?? null)) {
+            $from = '"'.str_replace('"', '', $message['from_name']).'" <'.$from.'>';
+        }
+
         $payload = array_filter([
-            'from' => $message['from'] ?? null,
+            'from' => $from,
             'to' => $message['to'] ?? null,
             'cc' => $message['cc'] ?? null,
             'bcc' => $message['bcc'] ?? null,

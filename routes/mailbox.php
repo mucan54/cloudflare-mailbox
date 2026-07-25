@@ -20,6 +20,7 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+    Route::put('/me', [AuthController::class, 'updateProfile']);
     Route::put('/password', [AuthController::class, 'updatePassword']);
 
     Route::get('/emails', [InboxController::class, 'index']);

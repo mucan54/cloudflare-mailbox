@@ -1,6 +1,6 @@
 // Mailbox PWA service worker (root scope). Handles install/activate, a tiny
 // app-shell cache, and Web Push notifications.
-const CACHE = 'mailbox-v2';
+const CACHE = 'mailbox-v3';
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();

@@ -49,6 +49,18 @@ class AuthController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'display_name' => ['nullable', 'string', 'max:255'],
+            'signature' => ['nullable', 'string', 'max:5000'],
+        ]);
+
+        $request->user()->update($data);
+
+        return response()->json(['mailbox' => $this->present($request->user()->fresh())]);
+    }
+
     public function updatePassword(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -73,6 +85,7 @@ class AuthController extends Controller
             'id' => $mailbox->id,
             'email' => $mailbox->email,
             'display_name' => $mailbox->display_name,
+            'signature' => $mailbox->signature,
             'unread' => $mailbox->emails()->whereNull('read_at')->count(),
         ];
     }

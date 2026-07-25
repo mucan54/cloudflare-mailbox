@@ -46,6 +46,7 @@ export const useAuth = defineStore('auth', {
                 email: data.mailbox.email,
                 token: data.token,
                 display_name: data.mailbox.display_name,
+                signature: data.mailbox.signature || '',
                 unread: data.mailbox.unread || 0,
             };
 
@@ -89,6 +90,7 @@ export const useAuth = defineStore('auth', {
                         const { data } = await apiFor(a.token).get('/me');
                         a.unread = data.mailbox.unread || 0;
                         a.display_name = data.mailbox.display_name;
+                        a.signature = data.mailbox.signature || '';
                     } catch (e) {
                         if (e.response?.status === 401) {
                             this.removeByEmail(a.email);
@@ -105,6 +107,21 @@ export const useAuth = defineStore('auth', {
                 this.active = this.accounts[0]?.email || null;
             }
             this.persist();
+        },
+
+        async updateProfile(email, payload) {
+            const acc = this.accountByEmail(email);
+            if (!acc) return;
+            const { data } = await apiFor(acc.token).put('/me', payload);
+            acc.display_name = data.mailbox.display_name;
+            acc.signature = data.mailbox.signature || '';
+            this.persist();
+        },
+
+        async changePassword(email, payload) {
+            const acc = this.accountByEmail(email);
+            if (!acc) return;
+            await apiFor(acc.token).put('/password', payload);
         },
 
         async logout(email = null) {
