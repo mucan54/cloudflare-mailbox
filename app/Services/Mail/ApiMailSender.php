@@ -17,7 +17,7 @@ class ApiMailSender implements MailSender
         try {
             $result = CloudflareClient::forAccount($account)->send($this->toApiPayload($message));
         } catch (CloudflareException $e) {
-            return SendResult::failed($e->getMessage(), ['errors' => $e->errors]);
+            return SendResult::failed($this->explain($e), ['errors' => $e->errors]);
         }
 
         if (! empty($result['permanent_bounces'])) {
@@ -28,7 +28,40 @@ class ApiMailSender implements MailSender
             return SendResult::delivered($result);
         }
 
-        return SendResult::queued($result);
+        if (! empty($result['queued'])) {
+            return SendResult::queued($result);
+        }
+
+        // Cloudflare returned success but accepted NO recipient (all buckets
+        // empty). The message was not sent — the recipient is almost always on
+        // the account's Suppressions list from a prior bounce/complaint. Do not
+        // mislabel this as "queued".
+        return SendResult::failed(
+            'Cloudflare hiçbir alıcıyı kabul etmedi — alıcı büyük ihtimalle Suppressions '
+            .'listesinde (önceki bounce/şikâyet). Cloudflare → Email Service → Email Sending → '
+            .'Suppressions’ı kontrol edip adresi kaldırın, ya da farklı bir alıcıyla deneyin.',
+            $result,
+        );
+    }
+
+    /**
+     * Turn a raw Cloudflare send error into an actionable message.
+     */
+    protected function explain(CloudflareException $e): string
+    {
+        $msg = $e->getMessage();
+
+        if (str_contains($msg, 'sending_disabled')) {
+            return $msg.' — Bu domain Cloudflare’de Email Sending için onboard edilmemiş '
+                .'(ya da yalnızca doğrulanmış hedeflere gönderime açık). Çözüm: Cloudflare Dashboard → '
+                .'Compute → Email Service → Email Sending → “Onboard Domain” ile domaini ekleyin.';
+        }
+
+        if (str_contains($msg, 'sender') && str_contains($msg, 'verif')) {
+            return $msg.' — Gönderen domain doğrulanmamış. Email Sending onboarding’ini (DKIM dahil) tamamlayın.';
+        }
+
+        return $msg;
     }
 
     /**

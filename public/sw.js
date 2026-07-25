@@ -1,6 +1,6 @@
 // Mailbox PWA service worker (root scope). Handles install/activate, a tiny
 // app-shell cache, and Web Push notifications.
-const CACHE = 'mailbox-v1';
+const CACHE = 'mailbox-v2';
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
@@ -27,13 +27,21 @@ self.addEventListener('push', (event) => {
         payload = { title: 'Yeni mail' };
     }
     event.waitUntil(
-        self.registration.showNotification(payload.title || 'Yeni mail', {
-            body: payload.body || '',
-            icon: payload.icon || '/icons/icon-192.png',
-            badge: payload.badge || '/icons/icon-192.png',
-            tag: payload.tag,
-            data: payload.data || {},
-        }),
+        Promise.all([
+            self.registration.showNotification(payload.title || 'Yeni mail', {
+                body: payload.body || '',
+                icon: payload.icon || '/icons/icon-192.png',
+                badge: payload.badge || '/icons/icon-192.png',
+                tag: payload.tag,
+                data: payload.data || {},
+            }),
+            // Tell any open page to refresh instantly — real-time without polling.
+            self.clients
+                .matchAll({ type: 'window', includeUncontrolled: true })
+                .then((clients) => {
+                    clients.forEach((c) => c.postMessage({ type: 'new-mail', data: payload.data || {} }));
+                }),
+        ]),
     );
 });
 

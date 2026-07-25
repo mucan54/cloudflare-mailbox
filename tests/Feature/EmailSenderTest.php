@@ -80,6 +80,38 @@ class EmailSenderTest extends TestCase
         $this->assertNotNull($sent->error);
     }
 
+    public function test_empty_response_is_failed_not_queued(): void
+    {
+        // Cloudflare "success" but every bucket empty = recipient suppressed /
+        // not accepted. Must not be recorded as a successful "queued" send.
+        $this->fakeSend(['delivered' => [], 'queued' => [], 'permanent_bounces' => []]);
+
+        $sent = (new EmailSender)->send($this->account(), [
+            'from' => 'me@a.com', 'to' => 'to@x.com', 'text' => 'Hello',
+        ]);
+
+        $this->assertSame('failed', $sent->status);
+        $this->assertStringContainsString('Suppressions', $sent->error);
+    }
+
+    public function test_sending_disabled_error_gets_actionable_hint(): void
+    {
+        Http::fake([
+            '*/email/sending/send' => Http::response([
+                'success' => false,
+                'errors' => [['code' => 10203, 'message' => 'email.sending.error.email.sending_disabled']],
+                'result' => null,
+            ], 403),
+        ]);
+
+        $sent = (new EmailSender)->send($this->account(), [
+            'from' => 'me@a.com', 'to' => 'to@x.com', 'text' => 'Hello',
+        ]);
+
+        $this->assertSame('failed', $sent->status);
+        $this->assertStringContainsString('Onboard Domain', $sent->error);
+    }
+
     public function test_size_limit_is_enforced(): void
     {
         $this->expectException(RuntimeException::class);

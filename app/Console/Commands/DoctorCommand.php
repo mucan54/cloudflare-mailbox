@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\CloudflareAccount;
 use App\Models\Domain;
 use App\Services\Cloudflare\CloudflareClient;
+use App\Services\Cloudflare\WebhookSignature;
 use App\Services\Cloudflare\WorkerDeployer;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
@@ -17,7 +18,7 @@ use Throwable;
  */
 class DoctorCommand extends Command
 {
-    protected $signature = 'cf:doctor {tenant? : Account slug or id} {--deploy : Also (re)deploy the worker and print the real wrangler result}';
+    protected $signature = 'cf:doctor {tenant? : Account slug or id} {--deploy : Also (re)deploy the worker and print the real wrangler result} {--webhook-test : POST a signed test payload to the webhook to verify the secret end-to-end (creates one throwaway email row)}';
 
     protected $description = 'Diagnose the inbound-mail chain (token, worker, catch-all, webhook)';
 
@@ -86,11 +87,95 @@ class DoctorCommand extends Command
         }
 
         foreach ($domains as $domain) {
+            $this->inspectExplicitRules($client, $domain, $workerName);
             $this->inspectCatchAll($client, $domain, $workerName, $account->isWorkerDeployed());
         }
 
         // 5) Webhook reachability --------------------------------------------
         $this->pingWebhook($deployer->webhookUrl());
+
+        // 6) Signed webhook self-test (opt-in) -------------------------------
+        if ($this->option('webhook-test')) {
+            $this->webhookSelfTest($account, $deployer->webhookUrl());
+        }
+    }
+
+    /**
+     * POST a properly-signed payload to the webhook exactly as the Worker would.
+     * 202 proves the webhook + account lookup + secret + signature all work, so
+     * a "no email stored" symptom is a Worker-can't-reach-Laravel or queue issue.
+     * 401 proves the Worker's WEBHOOK_SECRET no longer matches — redeploy.
+     */
+    protected function webhookSelfTest(CloudflareAccount $account, string $url): void
+    {
+        $body = json_encode([
+            'message_id' => '<cf-doctor-'.$account->id.'@selftest.local>',
+            'envelope_to' => 'cf-doctor@selftest.local',
+            'envelope_from' => 'doctor@selftest.local',
+            'subject' => '[cf:doctor] webhook self-test',
+            'text' => 'Bu satır cf:doctor --webhook-test tarafından üretildi; silebilirsiniz.',
+        ]);
+        $ts = (string) (time() * 1000);
+        $signature = WebhookSignature::sign((string) $account->webhook_secret, $ts, $body);
+
+        try {
+            $res = Http::withHeaders([
+                'Content-Type' => 'application/json',
+                'X-CF-Account' => (string) $account->account_id,
+                'X-CF-Signature' => $signature,
+                'X-CF-Timestamp' => $ts,
+            ])->withBody($body, 'application/json')->post($url);
+
+            if ($res->status() === 202) {
+                $this->good('İmzalı webhook self-test: 202 (webhook + secret + imza doğru). '
+                    .'Mail saklanmıyorsa sebep Worker→Laravel erişimi ya da queue worker’ıdır.');
+            } elseif ($res->status() === 401) {
+                $this->bad('İmzalı webhook self-test: 401 — Worker’ın WEBHOOK_SECRET’i saklanan '
+                    .'webhook_secret ile UYUŞMUYOR. Çözüm: `php artisan cf:doctor '.$account->slug.' --deploy` ile yeniden deploy edin.');
+            } else {
+                $this->warnLine('İmzalı webhook self-test beklenmedik yanıt: HTTP '.$res->status().' — '.$res->body());
+            }
+        } catch (Throwable $e) {
+            $this->bad('İmzalı webhook self-test gönderilemedi: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Explicit per-address rules ALWAYS take precedence over the catch-all in
+     * Cloudflare Email Routing. A stray literal rule for an address silently
+     * overrides catch-all → Worker, so that address never reaches the Worker.
+     */
+    protected function inspectExplicitRules(CloudflareClient $client, Domain $domain, string $workerName): void
+    {
+        try {
+            $rules = $client->listRoutingRules($domain->zone_id);
+        } catch (Throwable $e) {
+            return; // catch-all inspection reports the read-permission issue
+        }
+
+        foreach ($rules as $r) {
+            if (! ($r['enabled'] ?? false)) {
+                continue;
+            }
+
+            $literal = collect($r['matchers'] ?? [])->firstWhere('type', 'literal');
+            if (! $literal) {
+                continue; // 'all' matcher is the catch-all, handled separately
+            }
+
+            $addr = $literal['value'] ?? '?';
+            $action = $r['actions'][0]['type'] ?? 'yok';
+            $value = $r['actions'][0]['value'] ?? [];
+            $target = is_array($value) ? implode(',', $value) : (string) $value;
+
+            if ($action === 'worker' && $target === $workerName) {
+                $this->good("[{$domain->name}] Özel kural {$addr} → Worker (doğru).");
+            } else {
+                $this->warnLine("[{$domain->name}] Özel kural {$addr} → {$action} ({$target}) — bu kural "
+                    .'catch-all’ı EZER, yani bu adres Worker’a gitmez. Worker istiyorsanız bu kuralı silin '
+                    .'ya da Worker’a yönlendirin.');
+            }
+        }
     }
 
     protected function inspectCatchAll(CloudflareClient $client, Domain $domain, string $workerName, bool $workerDeployed): void

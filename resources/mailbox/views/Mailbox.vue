@@ -1,5 +1,5 @@
 <script setup>
-import { computed, inject, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '../stores/auth';
 
@@ -11,7 +11,13 @@ const drawer = inject('drawer');
 const emails = ref([]);
 const loading = ref(true);
 const search = ref('');
+const newCount = ref(0);
 let searchTimer = null;
+let pollTimer = null;
+
+function keyOf(e) {
+    return e._account + ':' + e.id;
+}
 
 const titles = {
     inbox: 'Gelen kutusu',
@@ -40,12 +46,58 @@ async function load() {
         emails.value = batches
             .flat()
             .sort((a, b) => new Date(b.received_at || 0) - new Date(a.received_at || 0));
+        newCount.value = 0;
     } catch (_) {
         emails.value = [];
     } finally {
         loading.value = false;
     }
 }
+
+// Silent background poll: fetch the current folder and merge any messages we
+// haven't seen to the top, so new mail appears without a manual refresh.
+async function poll() {
+    if (search.value || document.visibilityState !== 'visible') return;
+
+    const scope = auth.scope();
+    const path = isSent.value ? '/sent' : '/emails';
+
+    try {
+        const batches = await Promise.all(
+            scope.map(async (acc) => {
+                const params = isSent.value ? {} : { folder: props.folder };
+                const { data } = await auth.api(acc.email).get(path, { params });
+                return (data.data ?? []).map((e) => ({ ...e, _account: acc.email }));
+            }),
+        );
+
+        const seen = new Set(emails.value.map(keyOf));
+        const additions = batches.flat().filter((e) => !seen.has(keyOf(e)));
+
+        if (additions.length) {
+            emails.value = [...additions, ...emails.value].sort(
+                (a, b) => new Date(b.received_at || 0) - new Date(a.received_at || 0),
+            );
+            if (!isSent.value) {
+                newCount.value += additions.length;
+                auth.refreshUnread();
+            }
+        }
+    } catch (_) {
+        // ignore transient poll failures
+    }
+}
+
+// Web Push wakes the page via a SW message → refresh instantly. Polling stays
+// as a fallback (denied notifications / no VAPID key), at a relaxed interval.
+onMounted(() => {
+    window.addEventListener('mailbox:new-mail', poll);
+    pollTimer = setInterval(poll, 45000);
+});
+onBeforeUnmount(() => {
+    window.removeEventListener('mailbox:new-mail', poll);
+    clearInterval(pollTimer);
+});
 
 function open(e) {
     router.push({
@@ -120,6 +172,10 @@ watch(() => [props.folder, auth.active], load, { immediate: true });
     <div class="searchbar">
         <input v-model="search" type="search" placeholder="Ara…" />
     </div>
+
+    <button v-if="newCount > 0" class="new-mail" @click="newCount = 0">
+        {{ newCount }} yeni ileti ↑
+    </button>
 
     <div class="list">
         <div v-if="loading" class="empty">Yükleniyor…</div>
