@@ -8,57 +8,67 @@ const router = useRouter();
 const auth = useAuth();
 
 const from = ref(route.query.acc || auth.current?.email || '');
-const to = ref('');
-const cc = ref('');
-const bcc = ref('');
+const to = ref([]);
+const cc = ref([]);
+const bcc = ref([]);
+const toInput = ref('');
+const ccInput = ref('');
+const bccInput = ref('');
 const subject = ref('');
 const body = ref('');
 const showCc = ref(false);
-const showBcc = ref(false);
 const busy = ref(false);
 const error = ref('');
 const inReplyTo = ref(null);
 
-function parseList(s) {
-    return (s || '').split(/[,;\s]+/).filter(Boolean);
+function addChip(list, inputRef) {
+    const raw = inputRef.value.trim().replace(/[,;]+$/, '');
+    if (!raw) return;
+    raw.split(/[,;\s]+/).filter(Boolean).forEach((v) => {
+        if (!list.value.includes(v)) list.value.push(v);
+    });
+    inputRef.value = '';
+}
+function removeChip(list, i) {
+    list.value.splice(i, 1);
+}
+function onBackspace(list, inputRef) {
+    if (!inputRef.value && list.value.length) list.value.pop();
+}
+function onKey(e, list, inputRef) {
+    if (e.key === ',' || e.key === ';') {
+        e.preventDefault();
+        addChip(list, inputRef);
+    }
 }
 
-function stripPrefix(subj) {
-    return (subj || '').replace(/^(re|fwd|fw)\s*:\s*/i, '').trim();
+function stripPrefix(s) {
+    return (s || '').replace(/^(re|fwd|fw)\s*:\s*/i, '').trim();
 }
-
-function quote(orig) {
-    const when = orig.received_at ? new Date(orig.received_at).toLocaleString() : '';
-    return (
-        `\n\n----- Orijinal ileti -----\n` +
-        `Kimden: ${orig.from_name || ''} <${orig.from_email || ''}>\n` +
-        `Tarih: ${when}\n` +
-        `Konu: ${orig.subject || ''}\n\n` +
-        (orig.text_body || (orig.html_body ? orig.html_body.replace(/<[^>]+>/g, '') : ''))
-    );
+function quote(o) {
+    const when = o.received_at ? new Date(o.received_at).toLocaleString('tr-TR') : '';
+    return `\n\n----- Orijinal ileti -----\nKimden: ${o.from_name || ''} <${o.from_email || ''}>\nTarih: ${when}\nKonu: ${o.subject || ''}\n\n`
+        + (o.text_body || (o.html_body ? o.html_body.replace(/<[^>]+>/g, '') : ''));
 }
 
 onMounted(async () => {
     const { mode, src, acc, type } = route.query;
     if (!mode || !src) return;
-
-    const path = type === 'sent' ? `/sent/${src}` : `/emails/${src}`;
     let orig;
     try {
-        const { data } = await auth.api(acc).get(path);
+        const { data } = await auth.api(acc).get(type === 'sent' ? `/sent/${src}` : `/emails/${src}`);
         orig = data.email;
     } catch (_) {
         return;
     }
-
     from.value = acc || from.value;
     inReplyTo.value = type === 'sent' ? null : Number(src);
 
     if (mode === 'reply' || mode === 'replyAll') {
-        to.value = orig.from_email || '';
+        if (orig.from_email) to.value = [orig.from_email];
         subject.value = `Re: ${stripPrefix(orig.subject)}`;
         if (mode === 'replyAll' && orig.cc?.length) {
-            cc.value = orig.cc.filter((a) => a !== from.value).join(', ');
+            cc.value = orig.cc.filter((a) => a !== from.value);
             showCc.value = cc.value.length > 0;
         }
         body.value = quote(orig);
@@ -69,19 +79,20 @@ onMounted(async () => {
 });
 
 async function send() {
+    addChip(to, toInput);
+    addChip(cc, ccInput);
+    addChip(bcc, bccInput);
     error.value = '';
-    const recipients = parseList(to.value);
-    if (!recipients.length) {
+    if (!to.value.length) {
         error.value = 'En az bir alıcı girin.';
         return;
     }
-
     busy.value = true;
     try {
         await auth.api(from.value).post('/send', {
-            to: recipients,
-            cc: parseList(cc.value),
-            bcc: parseList(bcc.value),
+            to: to.value,
+            cc: cc.value,
+            bcc: bcc.value,
             subject: subject.value || '(konu yok)',
             html: `<div>${body.value.replace(/\n/g, '<br>')}</div>`,
             text: body.value,
@@ -97,48 +108,70 @@ async function send() {
 </script>
 
 <template>
-    <div class="topbar">
-        <button class="icon-btn" @click="router.back()">✕</button>
-        <h1 class="topbar-title">Yeni ileti</h1>
-        <button class="btn send" :disabled="busy" @click="send">{{ busy ? '…' : 'Gönder' }}</button>
-    </div>
+    <div class="cp">
+        <header class="rd-bar">
+            <button class="ghost-ic" @click="router.back()">
+                <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+            </button>
+            <h1 class="rd-title">Yeni ileti</h1>
+            <button class="send-btn" :disabled="busy" @click="send">
+                <svg viewBox="0 0 24 24"><path d="M21 4L3 11l6 2.5L11 20l3-5 7-11Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+                {{ busy ? '…' : 'Gönder' }}
+            </button>
+        </header>
 
-    <div class="compose">
-        <label class="field">
-            <span class="flabel">Kimden</span>
-            <select v-model="from" class="finput">
-                <option v-for="a in auth.accounts" :key="a.email" :value="a.email">
-                    {{ a.display_name ? a.display_name + ' — ' : '' }}{{ a.email }}
-                </option>
-            </select>
-        </label>
+        <div class="cp-form">
+            <label class="cp-field">
+                <span class="cp-lab">Kimden</span>
+                <select v-model="from" class="cp-sel">
+                    <option v-for="a in auth.accounts" :key="a.email" :value="a.email">
+                        {{ a.display_name ? a.display_name + ' — ' : '' }}{{ a.email }}
+                    </option>
+                </select>
+            </label>
 
-        <label class="field">
-            <span class="flabel">Kime</span>
-            <input v-model="to" class="finput" type="text" placeholder="ornek@site.com, ..." />
-            <span class="field-toggles">
-                <a @click="showCc = !showCc">Cc</a>
-                <a @click="showBcc = !showBcc">Bcc</a>
-            </span>
-        </label>
+            <div class="cp-field">
+                <span class="cp-lab">Kime</span>
+                <div class="chips">
+                    <span v-for="(c, i) in to" :key="c" class="chip-tag">{{ c }} <button @click="removeChip(to, i)">×</button></span>
+                    <input
+                        v-model="toInput"
+                        class="chip-in"
+                        type="text"
+                        placeholder="ornek@site.com"
+                        @keydown.enter.prevent="addChip(to, toInput)"
+                        @keydown="onKey($event, to, toInput)"
+                        @keydown.delete="onBackspace(to, toInput)"
+                        @blur="addChip(to, toInput)"
+                    />
+                </div>
+                <button class="cp-ccbtn" @click="showCc = !showCc">Cc/Bcc</button>
+            </div>
 
-        <label v-if="showCc" class="field">
-            <span class="flabel">Cc</span>
-            <input v-model="cc" class="finput" type="text" placeholder="Cc alıcıları" />
-        </label>
+            <template v-if="showCc">
+                <div class="cp-field">
+                    <span class="cp-lab">Cc</span>
+                    <div class="chips">
+                        <span v-for="(c, i) in cc" :key="c" class="chip-tag">{{ c }} <button @click="removeChip(cc, i)">×</button></span>
+                        <input v-model="ccInput" class="chip-in" type="text" placeholder="Cc" @keydown.enter.prevent="addChip(cc, ccInput)" @keydown.delete="onBackspace(cc, ccInput)" @blur="addChip(cc, ccInput)" />
+                    </div>
+                </div>
+                <div class="cp-field">
+                    <span class="cp-lab">Bcc</span>
+                    <div class="chips">
+                        <span v-for="(c, i) in bcc" :key="c" class="chip-tag">{{ c }} <button @click="removeChip(bcc, i)">×</button></span>
+                        <input v-model="bccInput" class="chip-in" type="text" placeholder="Bcc" @keydown.enter.prevent="addChip(bcc, bccInput)" @keydown.delete="onBackspace(bcc, bccInput)" @blur="addChip(bcc, bccInput)" />
+                    </div>
+                </div>
+            </template>
 
-        <label v-if="showBcc" class="field">
-            <span class="flabel">Bcc</span>
-            <input v-model="bcc" class="finput" type="text" placeholder="Bcc alıcıları" />
-        </label>
+            <label class="cp-field">
+                <span class="cp-lab">Konu</span>
+                <input v-model="subject" class="cp-sel" type="text" placeholder="Konu" />
+            </label>
 
-        <label class="field">
-            <span class="flabel">Konu</span>
-            <input v-model="subject" class="finput" type="text" placeholder="Konu" />
-        </label>
-
-        <textarea v-model="body" class="compose-body" placeholder="Mesajınızı yazın…" />
-
-        <p v-if="error" class="error">{{ error }}</p>
+            <textarea v-model="body" class="cp-body" placeholder="Mesajınızı yazın…" />
+            <p v-if="error" class="error">{{ error }}</p>
+        </div>
     </div>
 </template>

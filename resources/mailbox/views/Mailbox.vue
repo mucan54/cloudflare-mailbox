@@ -2,11 +2,12 @@
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '../stores/auth';
+import { initials, avatarColor } from '../avatar';
 
 const props = defineProps({ folder: { type: String, default: 'inbox' } });
 const auth = useAuth();
 const router = useRouter();
-const drawer = inject('drawer');
+const accountSheet = inject('accountSheet');
 
 const emails = ref([]);
 const loading = ref(true);
@@ -15,37 +16,39 @@ const newCount = ref(0);
 let searchTimer = null;
 let pollTimer = null;
 
+const titles = { inbox: 'Gelen kutusu', starred: 'Yıldızlı', sent: 'Gönderilenler', trash: 'Çöp kutusu' };
+const title = computed(() => titles[props.folder] || 'Gelen kutusu');
+const isSent = computed(() => props.folder === 'sent');
+const isTrash = computed(() => props.folder === 'trash');
+const greetName = computed(() => auth.current?.display_name || auth.current?.email?.split('@')[0] || '');
+const headerAvatar = computed(() => {
+    if (auth.isUnified) return { text: '∀', color: '#111827' };
+    const a = auth.current;
+    return { text: initials(a?.display_name || a?.email), color: avatarColor(a?.email || '') };
+});
+
 function keyOf(e) {
     return e._account + ':' + e.id;
 }
 
-const titles = {
-    inbox: 'Gelen kutusu',
-    starred: 'Yıldızlı',
-    sent: 'Gönderilenler',
-    trash: 'Çöp kutusu',
-};
-const title = computed(() => titles[props.folder] || 'Gelen kutusu');
-const isSent = computed(() => props.folder === 'sent');
-const isTrash = computed(() => props.folder === 'trash');
+async function fetchAll() {
+    const scope = auth.scope();
+    const path = isSent.value ? '/sent' : '/emails';
+    const batches = await Promise.all(
+        scope.map(async (acc) => {
+            const params = isSent.value ? {} : { folder: props.folder };
+            if (search.value) params.q = search.value;
+            const { data } = await auth.api(acc.email).get(path, { params });
+            return (data.data ?? []).map((e) => ({ ...e, _account: acc.email }));
+        }),
+    );
+    return batches.flat().sort((a, b) => new Date(b.received_at || 0) - new Date(a.received_at || 0));
+}
 
 async function load() {
     loading.value = true;
-    const scope = auth.scope();
-    const path = isSent.value ? '/sent' : '/emails';
-
     try {
-        const batches = await Promise.all(
-            scope.map(async (acc) => {
-                const params = isSent.value ? {} : { folder: props.folder };
-                if (search.value) params.q = search.value;
-                const { data } = await auth.api(acc.email).get(path, { params });
-                return (data.data ?? []).map((e) => ({ ...e, _account: acc.email }));
-            }),
-        );
-        emails.value = batches
-            .flat()
-            .sort((a, b) => new Date(b.received_at || 0) - new Date(a.received_at || 0));
+        emails.value = await fetchAll();
         newCount.value = 0;
     } catch (_) {
         emails.value = [];
@@ -54,26 +57,12 @@ async function load() {
     }
 }
 
-// Silent background poll: fetch the current folder and merge any messages we
-// haven't seen to the top, so new mail appears without a manual refresh.
 async function poll() {
     if (search.value || document.visibilityState !== 'visible') return;
-
-    const scope = auth.scope();
-    const path = isSent.value ? '/sent' : '/emails';
-
     try {
-        const batches = await Promise.all(
-            scope.map(async (acc) => {
-                const params = isSent.value ? {} : { folder: props.folder };
-                const { data } = await auth.api(acc.email).get(path, { params });
-                return (data.data ?? []).map((e) => ({ ...e, _account: acc.email }));
-            }),
-        );
-
+        const fresh = await fetchAll();
         const seen = new Set(emails.value.map(keyOf));
-        const additions = batches.flat().filter((e) => !seen.has(keyOf(e)));
-
+        const additions = fresh.filter((e) => !seen.has(keyOf(e)));
         if (additions.length) {
             emails.value = [...additions, ...emails.value].sort(
                 (a, b) => new Date(b.received_at || 0) - new Date(a.received_at || 0),
@@ -88,22 +77,50 @@ async function poll() {
     }
 }
 
-// Web Push wakes the page via a SW message → refresh instantly. Polling stays
-// as a fallback (denied notifications / no VAPID key), at a relaxed interval.
-onMounted(() => {
-    window.addEventListener('mailbox:new-mail', poll);
-    pollTimer = setInterval(poll, 45000);
-});
-onBeforeUnmount(() => {
-    window.removeEventListener('mailbox:new-mail', poll);
-    clearInterval(pollTimer);
+// ----- grouping by day -----
+function dayLabel(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const now = new Date();
+    const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const y0 = new Date(t0);
+    y0.setDate(y0.getDate() - 1);
+    if (d >= t0) return 'Bugün';
+    if (d >= y0) return 'Dün';
+    return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
+}
+
+const groups = computed(() => {
+    const out = [];
+    let cur = null;
+    for (const e of emails.value) {
+        const label = dayLabel(e.received_at);
+        if (!cur || cur.label !== label) {
+            cur = { label, items: [] };
+            out.push(cur);
+        }
+        cur.items.push(e);
+    }
+    return out;
 });
 
+function who(e) {
+    if (isSent.value) return e.to_email || '(alıcı yok)';
+    return e.from_name || e.from_email;
+}
+function avatarSeed(e) {
+    return isSent.value ? (e.to_email || '') : (e.from_email || '');
+}
+function fmt(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const now = new Date();
+    if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+}
+
 function open(e) {
-    router.push({
-        path: `/mail/${e.id}`,
-        query: { acc: e._account, type: isSent.value ? 'sent' : 'received' },
-    });
+    router.push({ path: `/mail/${e.id}`, query: { acc: e._account, type: isSent.value ? 'sent' : 'received' } });
 }
 
 async function toggleStar(e) {
@@ -113,9 +130,7 @@ async function toggleStar(e) {
     } catch (_) {
         e.starred = !e.starred;
     }
-    if (props.folder === 'starred' && !e.starred) {
-        emails.value = emails.value.filter((x) => x !== e);
-    }
+    if (props.folder === 'starred' && !e.starred) emails.value = emails.value.filter((x) => x !== e);
 }
 
 async function trash(e) {
@@ -128,100 +143,79 @@ async function trash(e) {
     }
 }
 
-async function toggleRead(e) {
-    e.read = !e.read;
-    try {
-        await auth.api(e._account).patch(`/emails/${e.id}`, { read: e.read });
-        auth.refreshUnread();
-    } catch (_) {
-        e.read = !e.read;
-    }
-}
-
-function fmt(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    const now = new Date();
-    if (d.toDateString() === now.toDateString()) {
-        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-    if (d.getFullYear() === now.getFullYear()) {
-        return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    }
-    return d.toLocaleDateString([], { year: '2-digit', month: 'short', day: 'numeric' });
-}
-
-function who(e) {
-    return isSent.value ? `Kime: ${e.to_email || ''}` : e.from_name || e.from_email;
-}
-
 watch(search, () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(load, 300);
 });
 watch(() => [props.folder, auth.active], load, { immediate: true });
+
+onMounted(() => {
+    window.addEventListener('mailbox:new-mail', poll);
+    pollTimer = setInterval(poll, 45000);
+});
+onBeforeUnmount(() => {
+    window.removeEventListener('mailbox:new-mail', poll);
+    clearTimeout(searchTimer);
+    clearInterval(pollTimer);
+});
 </script>
 
 <template>
-    <div class="topbar">
-        <button class="icon-btn menu" @click="drawer.open()">☰</button>
-        <h1 class="topbar-title">{{ title }}</h1>
-        <button class="icon-btn" title="Yenile" @click="load">⟳</button>
-    </div>
-
-    <div class="searchbar">
-        <input v-model="search" type="search" placeholder="Ara…" />
-    </div>
-
-    <button v-if="newCount > 0" class="new-mail" @click="newCount = 0">
-        {{ newCount }} yeni ileti ↑
-    </button>
-
-    <div class="list">
-        <div v-if="loading" class="empty">Yükleniyor…</div>
-        <div v-else-if="!emails.length" class="empty">Bu klasör boş.</div>
-
-        <div
-            v-for="e in emails"
-            :key="e._account + ':' + e.id"
-            class="row"
-            :class="{ unread: !e.read && !isSent }"
-            @click="open(e)"
-        >
-            <button
-                v-if="!isSent"
-                class="star"
-                :class="{ on: e.starred }"
-                title="Yıldızla"
-                @click.stop="toggleStar(e)"
-            >
-                {{ e.starred ? '★' : '☆' }}
+    <div class="mb">
+        <header class="mb-head">
+            <div class="mb-hello">
+                <span class="hi" v-if="props.folder === 'inbox'">Merhaba 👋</span>
+                <h1 class="mb-title">{{ props.folder === 'inbox' ? (greetName || title) : title }}</h1>
+            </div>
+            <button class="mb-avatar" :style="{ background: headerAvatar.color }" title="Hesaplar" @click="accountSheet.open()">
+                {{ headerAvatar.text }}
             </button>
+        </header>
 
-            <div class="row-body">
-                <div class="row-top">
-                    <span class="from">
-                        <span v-if="!e.read && !isSent" class="dot" />{{ who(e) }}
+        <div class="mb-search">
+            <svg viewBox="0 0 24 24" class="si"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M21 21l-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <input v-model="search" type="search" placeholder="Mail içinde ara" />
+        </div>
+
+        <button v-if="newCount > 0" class="new-mail" @click="newCount = 0">{{ newCount }} yeni ileti ↑</button>
+
+        <div class="mb-list">
+            <div v-if="loading" class="mb-empty">Yükleniyor…</div>
+            <div v-else-if="!emails.length" class="mb-empty">Bu klasör boş.</div>
+
+            <template v-for="g in groups" :key="g.label">
+                <div class="mb-group">{{ g.label }}</div>
+                <button
+                    v-for="e in g.items"
+                    :key="e._account + ':' + e.id"
+                    class="mb-row"
+                    :class="{ unread: !e.read && !isSent }"
+                    @click="open(e)"
+                >
+                    <span class="ava" :style="{ background: avatarColor(avatarSeed(e)) }">{{ initials(who(e)) }}</span>
+                    <span class="mb-body">
+                        <span class="mb-line1">
+                            <span class="mb-who">{{ who(e) }}</span>
+                            <span class="mb-time">{{ fmt(e.received_at) }}</span>
+                        </span>
+                        <span class="mb-subject">
+                            {{ e.subject || '(konu yok)' }}
+                            <span v-if="auth.isUnified" class="mb-acc">{{ e._account }}</span>
+                        </span>
+                        <span class="mb-snippet">{{ e.snippet }}</span>
                     </span>
-                    <span class="time">{{ fmt(e.received_at) }}</span>
-                </div>
-                <div class="subject">
-                    {{ e.subject || '(konu yok)' }}
-                    <span v-if="auth.isUnified" class="acc-tag">{{ e._account }}</span>
-                </div>
-                <div class="snippet">{{ e.snippet }}</div>
-            </div>
-
-            <div v-if="!isSent" class="row-actions">
-                <button class="icon-btn" :title="e.read ? 'Okunmadı yap' : 'Okundu yap'" @click.stop="toggleRead(e)">
-                    {{ e.read ? '✉️' : '📖' }}
+                    <span class="mb-side">
+                        <span
+                            class="mb-star"
+                            :class="{ on: e.starred }"
+                            @click.stop="!isSent && toggleStar(e)"
+                        >{{ e.starred ? '★' : (isSent ? '' : '☆') }}</span>
+                        <span v-if="!isSent" class="mb-trash" :title="isTrash ? 'Geri al' : 'Sil'" @click.stop="trash(e)">
+                            {{ isTrash ? '↩︎' : '🗑' }}
+                        </span>
+                    </span>
                 </button>
-                <button class="icon-btn" :title="isTrash ? 'Geri al' : 'Sil'" @click.stop="trash(e)">
-                    {{ isTrash ? '↩︎' : '🗑️' }}
-                </button>
-            </div>
+            </template>
         </div>
     </div>
-
-    <button class="fab" title="Yeni ileti" @click="router.push('/compose')">＋</button>
 </template>
