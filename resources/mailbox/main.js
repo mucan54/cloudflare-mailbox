@@ -12,34 +12,14 @@ import './app.css';
 })();
 
 // Service worker is served from the root so its scope covers the whole app.
+// The sw calls skipWaiting()/clients.claim() itself, so a new version takes
+// over on its own — we just register and check for updates once. We do NOT
+// reload on controllerchange: on installed iOS PWAs that spirals into a
+// refresh loop.
 if ('serviceWorker' in navigator) {
-    // When a new worker takes control (e.g. the fixed notification handler),
-    // reload once so the page is driven by the latest sw and assets. Guard on
-    // a pre-existing controller so a first install doesn't reload.
-    let reloading = false;
-    const hadController = !!navigator.serviceWorker.controller;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (hadController && !reloading) {
-            reloading = true;
-            window.location.reload();
-        }
-    });
-
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').then((reg) => {
-            // Actively check for a newer sw on every load and push a waiting one
-            // straight to active — installed PWAs otherwise keep a stale sw.
             reg.update().catch(() => {});
-            if (reg.waiting) reg.waiting.postMessage({ type: 'skip-waiting' });
-            reg.addEventListener('updatefound', () => {
-                const nw = reg.installing;
-                if (!nw) return;
-                nw.addEventListener('statechange', () => {
-                    if (nw.state === 'installed' && reg.waiting) {
-                        reg.waiting.postMessage({ type: 'skip-waiting' });
-                    }
-                });
-            });
         }).catch(() => {});
     });
 }

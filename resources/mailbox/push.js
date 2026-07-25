@@ -42,12 +42,26 @@ async function subscribeForAccounts(accounts) {
     const key = vapidKey();
     if (!key || !accounts?.length) return;
 
+    const appKey = urlBase64ToUint8Array(key);
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
+
+    // A subscription made with a different (rotated) VAPID key is dead: the
+    // push service still accepts it locally but the server can never encrypt to
+    // it, so notifications silently stop. Drop it and make a fresh one.
+    if (sub && !subscriptionMatchesKey(sub, appKey)) {
+        try {
+            await sub.unsubscribe();
+        } catch (_) {
+            // ignore
+        }
+        sub = null;
+    }
+
     if (!sub) {
         sub = await reg.pushManager.subscribe({
             userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(key),
+            applicationServerKey: appKey,
         });
     }
 
@@ -58,6 +72,18 @@ async function subscribeForAccounts(accounts) {
     await Promise.all(
         accounts.map((a) => apiFor(a.token).post('/push-subscribe', body).catch(() => {})),
     );
+}
+
+/** True when an existing subscription was created with `appKey`. */
+function subscriptionMatchesKey(sub, appKey) {
+    const cur = sub.options?.applicationServerKey;
+    if (!cur) return true; // can't introspect — assume it's fine
+    const a = new Uint8Array(cur);
+    if (a.length !== appKey.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== appKey[i]) return false;
+    }
+    return true;
 }
 
 function urlBase64ToUint8Array(base64String) {
