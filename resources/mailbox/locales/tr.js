@@ -1,0 +1,60 @@
+export default {
+    brand: 'Mailbox',
+    nav: {
+        mail: 'Posta', calendar: 'Takvim', people: 'Kişiler', tasks: 'Görevler',
+        inbox: 'Gelen kutusu', starred: 'Yıldızlı', sent: 'Gönderilenler', trash: 'Çöp kutusu', compose: 'Yeni ileti',
+    },
+    common: {
+        all: 'Tümü', unread: 'Okunmamış', search: 'Ara', cancel: 'İptal', save: 'Kaydet', add: 'Ekle',
+        delete: 'Sil', close: 'Kapat', back: 'Geri', undo: 'Geri al', loading: 'Yükleniyor…',
+        today: 'Bugün', yesterday: 'Dün', open: 'Aç',
+    },
+    mail: {
+        greeting: 'Merhaba 👋', searchPlaceholder: 'Mail içinde ara', searchTop: 'Ara  ( / )',
+        empty: 'Bu klasör boş.', noMatch: 'Eşleşen ileti yok.', noSubject: '(konu yok)', noRecipient: '(alıcı yok)',
+        to: 'Kime: {v}', reply: 'Yanıtla', replyAll: 'Tümünü yanıtla', forward: 'İlet', markUnread: 'Okunmadı yap',
+        star: 'Yıldızla', selected: '{n} seçili', movedToTrash: 'İleti çöp kutusuna taşındı', restored: 'İleti geri alındı',
+        movedN: '{n} ileti taşındı', newMail: '{n} yeni ileti ↑', selectToRead: 'Okumak için bir ileti seçin',
+        selectSub: 'Soldaki listeden bir öğe seçin veya', composeLink: 'yeni ileti yazın', attachments: 'Ekler',
+        items: '{n} öğe', unreadCount: '{n} okunmamış', notFound: 'İleti bulunamadı.', message: 'İleti', sentItem: 'Gönderilen',
+    },
+    compose: {
+        title: 'Yeni ileti', from: 'Kimden', to: 'Kime', subject: 'Konu', subjectPh: 'Konu', body: 'Mesajınızı yazın…',
+        send: 'Gönder', ccbcc: 'Cc/Bcc', needRecipient: 'En az bir alıcı girin.', failed: 'Gönderilemedi.',
+        recipientPh: 'ornek@site.com', origMessage: 'Orijinal ileti', from2: 'Kimden', date: 'Tarih',
+    },
+    login: {
+        title: 'Mailbox', addTitle: 'Hesap ekle', sub: 'Mail adresiniz ve şifrenizle giriş yapın.',
+        addSub: 'Başka bir mail hesabı ekleyin.', email: 'E-posta', password: 'Şifre',
+        signIn: 'Giriş yap', addAccount: 'Hesabı ekle', failed: 'Giriş başarısız.',
+    },
+    account: {
+        accounts: 'Hesaplar', all: 'Tüm hesaplar', unified: 'Birleşik', unifiedView: 'Birleşik görünüm',
+        add: '＋ Hesap ekle', signOut: 'Çıkış',
+    },
+    notif: {
+        prompt: '🔔 Yeni mail bildirimi almak için izin verin.', enable: '🔔 Bildirimleri aç', on: 'Aç',
+        blocked: 'Bildirimler engelli — tarayıcı ayarlarından izin verin.',
+    },
+    settings: {
+        readingPane: 'Okuma bölmesi', right: 'Sağda', bottom: 'Altta', off: 'Kapalı',
+        density: 'Yoğunluk', comfortable: 'Rahat', compact: 'Sıkışık',
+        theme: 'Tema', system: 'Sistem', light: 'Açık', dark: 'Koyu', language: 'Dil',
+    },
+    calendar: {
+        title: 'Takvim', newEvent: 'Yeni etkinlik', today: 'Bugün', eventTitle: 'Etkinlik adı',
+        time: 'Saat', location: 'Konum', online: 'Çevrimiçi', noEvents: 'Bu gün için etkinlik yok.',
+        deleteConfirm: 'Etkinlik silinsin mi?', save: 'Kaydet', allDay: 'Tüm gün',
+        days: ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'],
+    },
+    people: {
+        title: 'Kişiler', searchPh: 'Kişilerde ara', add: 'Kişi ekle', empty: 'Henüz kişi yok.',
+        name: 'Ad', email: 'E-posta', phone: 'Telefon', company: 'Şirket', jobTitle: 'Unvan', notes: 'Notlar',
+        sendMail: 'E-posta gönder', edit: 'Düzenle', deleteConfirm: 'Kişi silinsin mi?', newContact: 'Yeni kişi',
+        favorite: 'Sık kullanılan',
+    },
+    tasks: {
+        title: 'Görevlerim', addPh: 'Görev ekleyin ve Enter’a basın', add: 'Ekle', open: '{n} açık',
+        empty: 'Görev yok. İlk görevini ekle.', due: 'Bitiş', done: 'Tamamlandı',
+    },
+};

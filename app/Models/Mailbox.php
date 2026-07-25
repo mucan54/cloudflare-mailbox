@@ -68,4 +68,19 @@ class Mailbox extends Authenticatable implements AuthenticatableContract
     {
         return $this->hasMany(SentEmail::class);
     }
+
+    public function events(): HasMany
+    {
+        return $this->hasMany(Event::class);
+    }
+
+    public function contacts(): HasMany
+    {
+        return $this->hasMany(Contact::class);
+    }
+
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(Task::class);
+    }
 }

@@ -5,6 +5,9 @@ import Login from './views/Login.vue';
 import Mailbox from './views/Mailbox.vue';
 import EmailView from './views/EmailView.vue';
 import Compose from './views/Compose.vue';
+import Calendar from './views/Calendar.vue';
+import People from './views/People.vue';
+import Tasks from './views/Tasks.vue';
 
 const routes = [
     { path: '/login', component: Login, meta: { guest: true } },
@@ -12,6 +15,9 @@ const routes = [
     { path: '/f/:folder', component: Mailbox, props: true },
     { path: '/mail/:id', component: EmailView, props: true },
     { path: '/compose', component: Compose },
+    { path: '/calendar', component: Calendar },
+    { path: '/people', component: People },
+    { path: '/tasks', component: Tasks },
 ];
 
 const router = createRouter({
@@ -21,8 +27,6 @@ const router = createRouter({
 
 router.beforeEach((to) => {
     const auth = useAuth();
-    // /login doubles as "add another account", so an authenticated user must be
-    // able to reach it — only guard the truly private routes.
     if (!to.meta.guest && !auth.isAuthenticated) {
         return '/login';
     }

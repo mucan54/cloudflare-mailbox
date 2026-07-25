@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuth } from '../stores/auth';
+import { t, localeTag } from '../i18n';
 
 const route = useRoute();
 const router = useRouter();
@@ -46,13 +47,14 @@ function stripPrefix(s) {
     return (s || '').replace(/^(re|fwd|fw)\s*:\s*/i, '').trim();
 }
 function quote(o) {
-    const when = o.received_at ? new Date(o.received_at).toLocaleString('tr-TR') : '';
-    return `\n\n----- Orijinal ileti -----\nKimden: ${o.from_name || ''} <${o.from_email || ''}>\nTarih: ${when}\nKonu: ${o.subject || ''}\n\n`
+    const when = o.received_at ? new Date(o.received_at).toLocaleString(localeTag()) : '';
+    return `\n\n----- ${t('compose.origMessage')} -----\n${t('compose.from2')}: ${o.from_name || ''} <${o.from_email || ''}>\n${t('compose.date')}: ${when}\n${t('mail.message')}: ${o.subject || ''}\n\n`
         + (o.text_body || (o.html_body ? o.html_body.replace(/<[^>]+>/g, '') : ''));
 }
 
 onMounted(async () => {
     const { mode, src, acc, type } = route.query;
+    if (route.query.to) to.value = String(route.query.to).split(/[,;\s]+/).filter(Boolean);
     if (!mode || !src) return;
     let orig;
     try {
@@ -84,7 +86,7 @@ async function send() {
     addChip(bcc, bccInput);
     error.value = '';
     if (!to.value.length) {
-        error.value = 'En az bir alıcı girin.';
+        error.value = t('compose.needRecipient');
         return;
     }
     busy.value = true;
@@ -93,14 +95,14 @@ async function send() {
             to: to.value,
             cc: cc.value,
             bcc: bcc.value,
-            subject: subject.value || '(konu yok)',
+            subject: subject.value || t('mail.noSubject'),
             html: `<div>${body.value.replace(/\n/g, '<br>')}</div>`,
             text: body.value,
             in_reply_to_email_id: inReplyTo.value,
         });
         router.push('/f/sent');
     } catch (e) {
-        error.value = e.response?.data?.message || 'Gönderilemedi.';
+        error.value = e.response?.data?.message || t('compose.failed');
     } finally {
         busy.value = false;
     }
@@ -113,16 +115,16 @@ async function send() {
             <button class="ghost-ic" @click="router.back()">
                 <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
             </button>
-            <h1 class="rd-title">Yeni ileti</h1>
+            <h1 class="rd-title">{{ t('compose.title') }}</h1>
             <button class="send-btn" :disabled="busy" @click="send">
                 <svg viewBox="0 0 24 24"><path d="M21 4L3 11l6 2.5L11 20l3-5 7-11Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
-                {{ busy ? '…' : 'Gönder' }}
+                {{ busy ? '…' : t('compose.send') }}
             </button>
         </header>
 
         <div class="cp-form">
             <label class="cp-field">
-                <span class="cp-lab">Kimden</span>
+                <span class="cp-lab">{{ t('compose.from') }}</span>
                 <select v-model="from" class="cp-sel">
                     <option v-for="a in auth.accounts" :key="a.email" :value="a.email">
                         {{ a.display_name ? a.display_name + ' — ' : '' }}{{ a.email }}
@@ -131,21 +133,21 @@ async function send() {
             </label>
 
             <div class="cp-field">
-                <span class="cp-lab">Kime</span>
+                <span class="cp-lab">{{ t('compose.to') }}</span>
                 <div class="chips">
                     <span v-for="(c, i) in to" :key="c" class="chip-tag">{{ c }} <button @click="removeChip(to, i)">×</button></span>
                     <input
                         v-model="toInput"
                         class="chip-in"
                         type="text"
-                        placeholder="ornek@site.com"
+                        :placeholder="t('compose.recipientPh')"
                         @keydown.enter.prevent="addChip(to, toInput)"
                         @keydown="onKey($event, to, toInput)"
                         @keydown.delete="onBackspace(to, toInput)"
                         @blur="addChip(to, toInput)"
                     />
                 </div>
-                <button class="cp-ccbtn" @click="showCc = !showCc">Cc/Bcc</button>
+                <button class="cp-ccbtn" @click="showCc = !showCc">{{ t('compose.ccbcc') }}</button>
             </div>
 
             <template v-if="showCc">
@@ -166,11 +168,11 @@ async function send() {
             </template>
 
             <label class="cp-field">
-                <span class="cp-lab">Konu</span>
-                <input v-model="subject" class="cp-sel" type="text" placeholder="Konu" />
+                <span class="cp-lab">{{ t('compose.subject') }}</span>
+                <input v-model="subject" class="cp-sel" type="text" :placeholder="t('compose.subjectPh')" />
             </label>
 
-            <textarea v-model="body" class="cp-body" placeholder="Mesajınızı yazın…" />
+            <textarea v-model="body" class="cp-body" :placeholder="t('compose.body')" />
             <p v-if="error" class="error">{{ error }}</p>
         </div>
     </div>

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { useAuth } from '../stores/auth';
 import { useUi } from '../stores/ui';
 import { initials, avatarColor } from '../avatar';
+import { t, localeTag } from '../i18n';
 
 const props = defineProps({
     id: { type: [String, Number], required: true },
@@ -58,7 +59,7 @@ async function trash() {
     auth.refreshUnread();
     emit('changed');
     emit('close');
-    ui.toast('İleti çöp kutusuna taşındı', async () => {
+    ui.toast(t('mail.movedToTrash'), async () => {
         await auth.api(account.value).patch(`/emails/${props.id}`, { folder: from }).catch(() => {});
         auth.refreshUnread();
         emit('changed');
@@ -66,10 +67,10 @@ async function trash() {
 }
 
 function fmt(iso) {
-    return iso ? new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    return iso ? new Date(iso).toLocaleString(localeTag(), { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 }
 function fileKind(a) {
-    return (a.mime_type || '').split('/')[1]?.toUpperCase() || 'DOSYA';
+    return (a.mime_type || '').split('/')[1]?.toUpperCase() || 'FILE';
 }
 function fileSize(n) {
     if (!n) return '';
@@ -84,28 +85,28 @@ defineExpose({ reply, toggleStar, trash, markUnread });
 <template>
     <div class="rd">
         <header class="rd-bar">
-            <button class="ghost-ic" :title="embedded ? 'Kapat' : 'Geri'" @click="embedded ? emit('close') : router.back()">
+            <button class="ghost-ic" :title="embedded ? t('common.close') : t('common.back')" @click="embedded ? emit('close') : router.back()">
                 <svg v-if="!embedded" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <svg v-else viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
             </button>
 
             <div v-if="email && !isSent" class="rd-acts">
-                <button class="tbtn" @click="reply('reply')"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9h9a7 7 0 0 1 7 7v3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tlbl">Yanıtla</span></button>
-                <button class="tbtn" @click="reply('replyAll')"><svg viewBox="0 0 24 24"><path d="M7 14 2 9l5-5M12 14 7 9l5-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 9h8a6 6 0 0 1 6 6v3" fill="none" stroke="currentColor" stroke-width="1.7"/></svg><span class="tlbl">Tümü</span></button>
-                <button class="tbtn" @click="reply('forward')"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 9h-9a7 7 0 0 0-7 7v3" fill="none" stroke="currentColor" stroke-width="1.7"/></svg><span class="tlbl">İlet</span></button>
+                <button class="tbtn" @click="reply('reply')"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9h9a7 7 0 0 1 7 7v3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tlbl">{{ t('mail.reply') }}</span></button>
+                <button class="tbtn" @click="reply('replyAll')"><svg viewBox="0 0 24 24"><path d="M7 14 2 9l5-5M12 14 7 9l5-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 9h8a6 6 0 0 1 6 6v3" fill="none" stroke="currentColor" stroke-width="1.7"/></svg><span class="tlbl">{{ t('mail.replyAll') }}</span></button>
+                <button class="tbtn" @click="reply('forward')"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 9h-9a7 7 0 0 0-7 7v3" fill="none" stroke="currentColor" stroke-width="1.7"/></svg><span class="tlbl">{{ t('mail.forward') }}</span></button>
                 <span class="tsep" />
-                <button class="tbtn icon" :class="{ starred: email.starred }" title="Yıldızla" @click="toggleStar">{{ email.starred ? '★' : '☆' }}</button>
-                <button class="tbtn icon" title="Okunmadı yap" @click="markUnread"><svg viewBox="0 0 24 24"><path d="M2 8l10 6 10-6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="2" y="5" width="20" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
-                <button class="tbtn icon" title="Sil" @click="trash"><svg viewBox="0 0 24 24"><path d="M5 7h14M9 7V5h6v2M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button class="tbtn icon" :class="{ starred: email.starred }" :title="t('mail.star')" @click="toggleStar">{{ email.starred ? '★' : '☆' }}</button>
+                <button class="tbtn icon" :title="t('mail.markUnread')" @click="markUnread"><svg viewBox="0 0 24 24"><path d="M2 8l10 6 10-6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="2" y="5" width="20" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+                <button class="tbtn icon" :title="t('common.delete')" @click="trash"><svg viewBox="0 0 24 24"><path d="M5 7h14M9 7V5h6v2M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
             </div>
-            <h1 v-else class="rd-title">{{ isSent ? 'Gönderilen' : 'İleti' }}</h1>
+            <h1 v-else class="rd-title">{{ isSent ? t('mail.sentItem') : t('mail.message') }}</h1>
         </header>
 
-        <div v-if="loading" class="mb-empty">Yükleniyor…</div>
-        <div v-else-if="!email" class="mb-empty">İleti bulunamadı.</div>
+        <div v-if="loading" class="mb-empty">{{ t('common.loading') }}</div>
+        <div v-else-if="!email" class="mb-empty">{{ t('mail.notFound') }}</div>
 
         <div v-else class="rd-scroll">
-            <h2 class="rd-subject">{{ email.subject || '(konu yok)' }}</h2>
+            <h2 class="rd-subject">{{ email.subject || t('mail.noSubject') }}</h2>
             <div class="rd-sender">
                 <span class="ava ava-lg" :style="{ background: avatarColor(peerEmail) }">{{ initials(peer) }}</span>
                 <div class="rd-sender-meta">
@@ -119,7 +120,7 @@ defineExpose({ reply, toggleStar, trash, markUnread });
             <pre v-else class="rd-body text">{{ email.text_body }}</pre>
 
             <div v-if="email.attachments?.length" class="rd-atts">
-                <div class="rd-atts-head">Ekler <span class="pill">{{ email.attachments.length }}</span></div>
+                <div class="rd-atts-head">{{ t('mail.attachments') }} <span class="pill">{{ email.attachments.length }}</span></div>
                 <div class="rd-atts-grid">
                     <a v-for="a in email.attachments" :key="a.id" class="att-card" :href="a.url || '#'" target="_blank">
                         <span class="att-thumb">📄</span>
@@ -130,9 +131,9 @@ defineExpose({ reply, toggleStar, trash, markUnread });
             </div>
 
             <div class="rd-reply">
-                <button class="chip" @click="reply('reply')">↩︎ Yanıtla</button>
-                <button v-if="!isSent" class="chip" @click="reply('replyAll')">Tümünü yanıtla</button>
-                <button class="chip" @click="reply('forward')">➦ İlet</button>
+                <button class="chip" @click="reply('reply')">↩︎ {{ t('mail.reply') }}</button>
+                <button v-if="!isSent" class="chip" @click="reply('replyAll')">{{ t('mail.replyAll') }}</button>
+                <button class="chip" @click="reply('forward')">➦ {{ t('mail.forward') }}</button>
             </div>
         </div>
     </div>
