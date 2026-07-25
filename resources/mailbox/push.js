@@ -1,3 +1,4 @@
+import { ref } from 'vue';
 import { apiFor } from './api';
 
 /**
@@ -20,11 +21,22 @@ export function notificationPermission() {
     return pushSupported() ? Notification.permission : 'unsupported';
 }
 
+// Shared, reactive permission state so EVERY prompt (home banner, account
+// sheet, add-account) reflects the same value. Granting in one place hides the
+// others immediately — pressing a second, stale prompt used to re-subscribe and
+// break push.
+export const pushPermission = ref(notificationPermission());
+export function refreshPushPermission() {
+    pushPermission.value = notificationPermission();
+    return pushPermission.value;
+}
+
 /** Prompt for permission (must run on a user gesture) then subscribe every account. */
 export async function requestAndSubscribe(accounts) {
     if (!pushSupported() || !vapidKey()) return false;
 
     const permission = await Notification.requestPermission();
+    refreshPushPermission();
     if (permission !== 'granted') return false;
 
     await subscribeForAccounts(accounts);
