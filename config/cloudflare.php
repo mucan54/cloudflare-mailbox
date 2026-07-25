@@ -86,13 +86,20 @@ return [
     | Attachments storage
     |--------------------------------------------------------------------------
     |
-    | Any Laravel filesystem disk name. `s3` works for AWS S3, Cloudflare R2
-    | and MinIO (only the endpoint/region differ). Files are stored private
-    | and served via temporary signed URLs.
+    | Any Laravel filesystem disk name. Defaults to the local disk so it works
+    | out of the box with no extra setup. Set CLOUDFLARE_ATTACHMENTS_DISK=s3
+    | (or any disk) for durable, off-container storage — `s3` works for AWS S3,
+    | Cloudflare R2 and MinIO (only the endpoint/region differ). Downloads are
+    | streamed through an authenticated, mailbox-scoped route, so any disk
+    | works (a signed temporary URL is not required).
+    |
+    | Note: the local disk lives on the container's filesystem, which is
+    | ephemeral on most PaaS deploys (files are lost on redeploy). Use s3/R2
+    | if you need attachments to persist across deploys.
     |
     */
 
-    'attachments_disk' => env('CLOUDFLARE_ATTACHMENTS_DISK', 's3'),
+    'attachments_disk' => env('CLOUDFLARE_ATTACHMENTS_DISK', 'local'),
 
     /*
     |--------------------------------------------------------------------------

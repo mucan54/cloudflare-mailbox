@@ -105,6 +105,7 @@ class MailboxApiTest extends TestCase
 
     public function test_send_with_attachment_forwards_it_and_stores_a_copy(): void
     {
+        Storage::fake('local');
         Http::fake(['*/email/sending/send' => Http::response([
             'success' => true, 'errors' => [], 'result' => ['delivered' => ['x@y.com'], 'queued' => [], 'permanent_bounces' => []],
         ])]);
