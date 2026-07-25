@@ -17,6 +17,15 @@ const newCount = ref(0);
 let searchTimer = null;
 let pollTimer = null;
 
+// Pull-to-refresh (mobile)
+const rootEl = ref(null);
+const listEl = ref(null);
+const pullDist = ref(0);
+const refreshing = ref(false);
+const isPulling = ref(false);
+let ptrStartY = 0;
+const PTR_THRESHOLD = 70;
+
 const titles = { inbox: 'Gelen kutusu', starred: 'Yıldızlı', sent: 'Gönderilenler', trash: 'Çöp kutusu' };
 const title = computed(() => titles[props.folder] || 'Gelen kutusu');
 const isSent = computed(() => props.folder === 'sent');
@@ -159,6 +168,48 @@ function dismissNotif() {
     sessionStorage.setItem('notif_dismissed', '1');
 }
 
+// ----- pull-to-refresh -----
+function atTop() {
+    const winTop = window.scrollY || document.documentElement.scrollTop || 0;
+    const listTop = listEl.value ? listEl.value.scrollTop : 0;
+    return winTop <= 0 && listTop <= 0;
+}
+function ptrStart(e) {
+    if (refreshing.value || !atTop()) {
+        isPulling.value = false;
+        return;
+    }
+    ptrStartY = e.touches[0].clientY;
+    isPulling.value = true;
+}
+function ptrMove(e) {
+    if (!isPulling.value) return;
+    const dy = e.touches[0].clientY - ptrStartY;
+    if (dy <= 0 || !atTop()) {
+        pullDist.value = 0;
+        isPulling.value = false;
+        return;
+    }
+    pullDist.value = Math.min(96, dy * 0.5); // rubber-band resistance
+    if (pullDist.value > 4 && e.cancelable) e.preventDefault();
+}
+async function ptrEnd() {
+    if (!isPulling.value) return;
+    isPulling.value = false;
+    if (pullDist.value >= PTR_THRESHOLD) {
+        refreshing.value = true;
+        pullDist.value = 52;
+        try {
+            await load();
+        } finally {
+            refreshing.value = false;
+            pullDist.value = 0;
+        }
+    } else {
+        pullDist.value = 0;
+    }
+}
+
 watch(search, () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(load, 300);
@@ -168,16 +219,30 @@ watch(() => [props.folder, auth.active], load, { immediate: true });
 onMounted(() => {
     window.addEventListener('mailbox:new-mail', poll);
     pollTimer = setInterval(poll, 45000);
+    const el = rootEl.value;
+    if (el) {
+        el.addEventListener('touchstart', ptrStart, { passive: true });
+        el.addEventListener('touchmove', ptrMove, { passive: false });
+        el.addEventListener('touchend', ptrEnd, { passive: true });
+        el.addEventListener('touchcancel', ptrEnd, { passive: true });
+    }
 });
 onBeforeUnmount(() => {
     window.removeEventListener('mailbox:new-mail', poll);
     clearTimeout(searchTimer);
     clearInterval(pollTimer);
+    const el = rootEl.value;
+    if (el) {
+        el.removeEventListener('touchstart', ptrStart);
+        el.removeEventListener('touchmove', ptrMove);
+        el.removeEventListener('touchend', ptrEnd);
+        el.removeEventListener('touchcancel', ptrEnd);
+    }
 });
 </script>
 
 <template>
-    <div class="mb">
+    <div class="mb" ref="rootEl">
         <header class="mb-head">
             <div class="mb-hello">
                 <span class="hi" v-if="props.folder === 'inbox'">Merhaba 👋</span>
@@ -203,7 +268,15 @@ onBeforeUnmount(() => {
 
         <button v-if="newCount > 0" class="new-mail" @click="newCount = 0">{{ newCount }} yeni ileti ↑</button>
 
-        <div class="mb-list">
+        <div class="ptr" :class="{ anim: !isPulling }" :style="{ height: pullDist + 'px' }">
+            <span
+                class="ptr-ic"
+                :class="{ spin: refreshing }"
+                :style="{ transform: refreshing ? '' : `rotate(${pullDist * 3}deg)`, opacity: (pullDist > 6 || refreshing) ? 1 : 0 }"
+            >↻</span>
+        </div>
+
+        <div class="mb-list" ref="listEl">
             <div v-if="loading" class="mb-empty">Yükleniyor…</div>
             <div v-else-if="!emails.length" class="mb-empty">Bu klasör boş.</div>
 

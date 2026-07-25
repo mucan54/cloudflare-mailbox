@@ -109,8 +109,22 @@ and set two env vars:
    It prints a `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`.
 2. Add both to Coolify → **Environment Variables** and redeploy.
 
-Keep them stable across deploys. On iOS, push only works once the user installs the
-PWA to the Home Screen (Add to Home Screen).
+**`VAPID_SUBJECT` must be a `mailto:` or `https://` URL** — it identifies you to the
+push services (Apple/iOS is strict and silently rejects an invalid value, so no
+notification arrives). Set it to a contact address, e.g.:
+
+```
+VAPID_SUBJECT=mailto:you@yourdomain.com
+```
+
+If you leave it unset it falls back to `APP_URL` (a valid `https://` URL). A bare
+value like `mailbox` is invalid; the app normalises an email-looking value to
+`mailto:<email>` and otherwise falls back to `APP_URL`, but set it explicitly to be safe.
+
+Keep the keys stable across deploys (rotating them invalidates every existing
+subscription — users must re-enable notifications). On iOS (16.4+), push only works
+once the user installs the PWA to the Home Screen (Add to Home Screen), opens it from
+the Home Screen icon, and grants permission via the in-app "Bildirimleri aç" prompt.
 
 ### Notes
 

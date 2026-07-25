@@ -41,10 +41,8 @@ svg { width: 100%; height: 100%; display: block; }
     width: 44px;
     height: 44px;
     min-width: 44px;
-    flex: 0 0 44px;
-    flex-shrink: 0;
-    align-self: flex-start;
-    aspect-ratio: 1 / 1;
+    max-width: 44px;
+    flex: none;
     border-radius: 50%;
     color: #fff;
     font-weight: 700;
@@ -53,8 +51,8 @@ svg { width: 100%; height: 100%; display: block; }
     letter-spacing: .3px;
     overflow: hidden;
 }
-.ava.sm { width: 38px; height: 38px; min-width: 38px; flex-basis: 38px; font-size: 14px; align-self: center; }
-.ava.lg { width: 52px; height: 52px; min-width: 52px; flex-basis: 52px; font-size: 18px; align-self: center; }
+.ava-sm { width: 38px; height: 38px; min-width: 38px; max-width: 38px; font-size: 14px; }
+.ava-lg { width: 52px; height: 52px; min-width: 52px; max-width: 52px; font-size: 18px; }
 
 .pill {
     background: var(--primary);
@@ -159,6 +157,13 @@ svg { width: 100%; height: 100%; display: block; }
     border-radius: 999px;
     box-shadow: var(--shadow-sm);
 }
+
+/* Pull-to-refresh indicator */
+.ptr { display: flex; align-items: flex-end; justify-content: center; overflow: hidden; height: 0; }
+.ptr.anim { transition: height .24s cubic-bezier(.2, .8, .2, 1); }
+.ptr-ic { font-size: 22px; color: var(--muted); padding-bottom: 10px; display: inline-block; will-change: transform; }
+.ptr-ic.spin { animation: ptr-rot .7s linear infinite; }
+@keyframes ptr-rot { to { transform: rotate(360deg); } }
 
 .mb-list { padding: 0 8px calc(96px + env(safe-area-inset-bottom)); }
 .mb-empty { padding: 60px 20px; text-align: center; color: var(--muted); }
@@ -482,6 +487,16 @@ svg { width: 100%; height: 100%; display: block; }
 .acct-add.notif { border-style: solid; background: color-mix(in srgb, var(--primary) 8%, transparent); color: var(--primary); border-color: transparent; }
 .notif-hint { font-size: 12px; color: var(--muted); text-align: center; margin: 8px 0 0; }
 
+/* Route transitions — out-in so screens never overlap during navigation. */
+.view-enter-active { transition: opacity .18s ease, transform .18s ease; }
+.view-leave-active { transition: opacity .14s ease, transform .14s ease; }
+.view-enter-from { opacity: 0; transform: translateY(8px); }
+.view-leave-to { opacity: 0; transform: translateY(-6px); }
+@media (prefers-reduced-motion: reduce) {
+    .view-enter-active, .view-leave-active { transition: opacity .12s ease; }
+    .view-enter-from, .view-leave-to { transform: none; }
+}
+
 .sheet-enter-active, .sheet-leave-active { transition: opacity .2s ease; }
 .sheet-enter-active .sheet, .sheet-leave-active .sheet { transition: transform .24s cubic-bezier(.2, .8, .2, 1); }
 .sheet-enter-from, .sheet-leave-to { opacity: 0; }
@@ -490,7 +505,7 @@ svg { width: 100%; height: 100%; display: block; }
 /* ======================================================================
    LOGIN
    ====================================================================== */
-.lg {
+.login {
     min-height: 100dvh;
     display: grid;
     place-items: center;

@@ -89,8 +89,18 @@ class AdminPanelSmokeTest extends TestCase
             'subject' => 'Hi', 'received_at' => now(),
         ]);
 
+        $account->sentEmails()->create([
+            'driver' => 'api', 'from_email' => 'me@a.com', 'to' => ['x@y.com'],
+            'subject' => 'Outgoing', 'status' => 'bounced', 'error' => 'Recipient blocked (S3150)',
+            'cf_response' => ['permanent_bounces' => ['x@y.com']], 'sent_at' => now(),
+        ]);
+
         $this->actingAs($user)->get("/admin/{$account->slug}/emails")->assertSuccessful()->assertSee('Hi');
-        $this->actingAs($user)->get("/admin/{$account->slug}/sent-emails")->assertSuccessful();
+        $this->actingAs($user)
+            ->get("/admin/{$account->slug}/sent-emails")
+            ->assertSuccessful()
+            ->assertSee('Outgoing')
+            ->assertSee('S3150');
     }
 
     public function test_tenant_scoping_hides_other_tenant_data(): void
