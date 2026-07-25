@@ -3,6 +3,7 @@ import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '../stores/auth';
 import { initials, avatarColor } from '../avatar';
+import { pushSupported, notificationPermission, requestAndSubscribe, vapidKey } from '../push';
 
 const props = defineProps({ folder: { type: String, default: 'inbox' } });
 const auth = useAuth();
@@ -143,6 +144,21 @@ async function trash(e) {
     }
 }
 
+// Discoverable notification prompt (inbox only).
+const notifState = ref(notificationPermission());
+const notifDismissed = ref(sessionStorage.getItem('notif_dismissed') === '1');
+const showNotifBanner = computed(
+    () => props.folder === 'inbox' && pushSupported() && !!vapidKey() && notifState.value === 'default' && !notifDismissed.value,
+);
+async function enableNotif() {
+    await requestAndSubscribe(auth.accounts);
+    notifState.value = notificationPermission();
+}
+function dismissNotif() {
+    notifDismissed.value = true;
+    sessionStorage.setItem('notif_dismissed', '1');
+}
+
 watch(search, () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(load, 300);
@@ -175,6 +191,14 @@ onBeforeUnmount(() => {
         <div class="mb-search">
             <svg viewBox="0 0 24 24" class="si"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M21 21l-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
             <input v-model="search" type="search" placeholder="Mail içinde ara" />
+        </div>
+
+        <div v-if="showNotifBanner" class="notif-banner">
+            <span>🔔 Yeni mail bildirimi almak için izin verin.</span>
+            <span class="nb-actions">
+                <button class="nb-yes" @click="enableNotif">Aç</button>
+                <button class="nb-no" @click="dismissNotif">×</button>
+            </span>
         </div>
 
         <button v-if="newCount > 0" class="new-mail" @click="newCount = 0">{{ newCount }} yeni ileti ↑</button>
