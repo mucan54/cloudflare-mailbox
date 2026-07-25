@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Mailbox\AttachmentController;
 use App\Http\Controllers\Mailbox\AuthController;
 use App\Http\Controllers\Mailbox\ContactController;
 use App\Http\Controllers\Mailbox\EventController;
@@ -32,6 +33,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/send', [SendController::class, 'store']);
 
     Route::get('/recipients', [RecipientController::class, 'suggest']);
+
+    Route::get('/attachments/{attachment}/download', [AttachmentController::class, 'download']);
 
     Route::post('/push-subscribe', [PushController::class, 'subscribe']);
     Route::delete('/push-subscribe', [PushController::class, 'unsubscribe']);

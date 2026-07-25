@@ -22,6 +22,46 @@ const busy = ref(false);
 const error = ref('');
 const inReplyTo = ref(null);
 
+// ----- attachments -----
+const attachments = ref([]);
+const fileInput = ref(null);
+const MAX_TOTAL = 4.5 * 1024 * 1024; // stay under Cloudflare's 5 MiB (incl. body)
+
+function pickFiles() {
+    fileInput.value?.click();
+}
+function onFiles(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    files.forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const res = String(reader.result || '');
+            const content = res.includes(',') ? res.slice(res.indexOf(',') + 1) : res;
+            const total = attachments.value.reduce((n, a) => n + a.size, 0) + file.size;
+            if (total > MAX_TOTAL) {
+                error.value = t('compose.attachTooBig');
+                return;
+            }
+            attachments.value.push({
+                filename: file.name,
+                type: file.type || 'application/octet-stream',
+                size: file.size,
+                content,
+            });
+        };
+        reader.readAsDataURL(file);
+    });
+}
+function removeAttachment(i) {
+    attachments.value.splice(i, 1);
+}
+function fmtSize(n) {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
 // Chip helpers are keyed by field name ('to'/'cc'/'bcc'). Passing the ref
 // itself through a template expression doesn't work: Vue auto-unwraps refs in
 // templates, so the handler would receive the plain array and `.value` would be
@@ -163,6 +203,7 @@ async function send() {
             html: `<div>${body.value.replace(/\n/g, '<br>')}</div>`,
             text: body.value,
             in_reply_to_email_id: inReplyTo.value,
+            attachments: attachments.value,
         });
         router.push('/f/sent');
     } catch (e) {
@@ -180,6 +221,10 @@ async function send() {
                 <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
             </button>
             <h1 class="rd-title">{{ t('compose.title') }}</h1>
+            <button class="ghost-ic" :title="t('compose.attach')" @click="pickFiles">
+                <svg viewBox="0 0 24 24"><path d="M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <input ref="fileInput" type="file" multiple class="cp-file" @change="onFiles" />
             <button class="send-btn" :disabled="busy" @click="send">
                 <svg viewBox="0 0 24 24"><path d="M21 4L3 11l6 2.5L11 20l3-5 7-11Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
                 {{ busy ? '…' : t('compose.send') }}
@@ -266,6 +311,15 @@ async function send() {
                 <span class="cp-lab">{{ t('compose.subject') }}</span>
                 <input v-model="subject" class="cp-sel" type="text" :placeholder="t('compose.subjectPh')" />
             </label>
+
+            <div v-if="attachments.length" class="cp-atts">
+                <div v-for="(a, i) in attachments" :key="i" class="cp-att">
+                    <svg class="cp-att-ic" viewBox="0 0 24 24"><path d="M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="cp-att-name">{{ a.filename }}</span>
+                    <span class="cp-att-size">{{ fmtSize(a.size) }}</span>
+                    <button type="button" class="cp-att-x" @pointerdown.prevent="removeAttachment(i)">×</button>
+                </div>
+            </div>
 
             <textarea v-model="body" class="cp-body" :placeholder="t('compose.body')" />
             <p v-if="error" class="error">{{ error }}</p>
