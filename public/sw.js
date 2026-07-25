@@ -1,6 +1,6 @@
 // Mailbox PWA service worker (root scope). Handles install/activate, a tiny
 // app-shell cache, and Web Push notifications.
-const CACHE = 'mailbox-v4';
+const CACHE = 'mailbox-v5';
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
@@ -9,11 +9,6 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
     event.waitUntil(self.clients.claim());
-});
-
-// The page can nudge a freshly-installed worker to take over immediately.
-self.addEventListener('message', (event) => {
-    if (event.data && event.data.type === 'skip-waiting') self.skipWaiting();
 });
 
 self.addEventListener('fetch', (event) => {
