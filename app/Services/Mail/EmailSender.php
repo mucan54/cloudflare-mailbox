@@ -6,6 +6,7 @@ use App\Models\Attachment;
 use App\Models\CloudflareAccount;
 use App\Models\Mailbox;
 use App\Models\SentEmail;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -73,25 +74,36 @@ class EmailSender
         $disk = config('cloudflare.attachments_disk', 'local');
 
         foreach ($attachments as $a) {
-            $binary = isset($a['content_raw'])
-                ? $a['content_raw']
-                : (! empty($a['content']) ? base64_decode((string) $a['content'], true) : false);
+            // Persisting the sent copy is best-effort: the mail is already sent,
+            // so a storage failure (e.g. a misconfigured attachments disk) must
+            // never turn a successful send into a 500. Record what we can.
+            try {
+                $binary = isset($a['content_raw'])
+                    ? $a['content_raw']
+                    : (! empty($a['content']) ? base64_decode((string) $a['content'], true) : false);
 
-            $path = null;
-            if ($binary !== false && $binary !== null && $binary !== '') {
-                $path = 'attachments/sent/'.$sent->id.'/'.Str::random(8).'-'.($a['filename'] ?? 'file');
-                Storage::disk($disk)->put($path, $binary);
+                $path = null;
+                if (is_string($binary) && $binary !== '') {
+                    $path = 'attachments/sent/'.$sent->id.'/'.Str::random(8).'-'.($a['filename'] ?? 'file');
+                    Storage::disk($disk)->put($path, $binary);
+                }
+
+                Attachment::create([
+                    'attachable_type' => SentEmail::class,
+                    'attachable_id' => $sent->id,
+                    'filename' => $a['filename'] ?? 'attachment',
+                    'mime_type' => $a['type'] ?? $a['mime_type'] ?? null,
+                    'size' => $a['size'] ?? (is_string($binary) ? strlen($binary) : 0),
+                    'storage_disk' => $path ? $disk : null,
+                    'storage_path' => $path,
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('Sent attachment copy failed', [
+                    'sent_email' => $sent->id,
+                    'filename' => $a['filename'] ?? null,
+                    'error' => $e->getMessage(),
+                ]);
             }
-
-            Attachment::create([
-                'attachable_type' => SentEmail::class,
-                'attachable_id' => $sent->id,
-                'filename' => $a['filename'] ?? 'attachment',
-                'mime_type' => $a['type'] ?? $a['mime_type'] ?? null,
-                'size' => $a['size'] ?? (is_string($binary) ? strlen($binary) : 0),
-                'storage_disk' => $path ? $disk : null,
-                'storage_path' => $path,
-            ]);
         }
     }
 
