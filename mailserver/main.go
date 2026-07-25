@@ -8,8 +8,8 @@
 package main
 
 import (
-	"crypto/tls"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -25,15 +25,8 @@ func env(key, def string) string {
 
 func main() {
 	api := NewAPI(env("LARAVEL_API_URL", "http://localhost"))
-
-	var tlsConfig *tls.Config
-	if cert, key := os.Getenv("TLS_CERT"), os.Getenv("TLS_KEY"); cert != "" && key != "" {
-		pair, err := tls.LoadX509KeyPair(cert, key)
-		if err != nil {
-			log.Fatalf("tls: %v", err)
-		}
-		tlsConfig = &tls.Config{Certificates: []tls.Certificate{pair}}
-	}
+	tlsConfig := loadTLS() // real certs if provided, else self-signed
+	allowInsecure := env("ALLOW_INSECURE_AUTH", "false") == "true"
 
 	// --- SMTP submission (587 STARTTLS) ---
 	sserv := smtp.NewServer(&smtpBackend{api: api})
@@ -44,7 +37,7 @@ func main() {
 	sserv.MaxMessageBytes = 25 * 1024 * 1024
 	sserv.MaxRecipients = 50
 	sserv.TLSConfig = tlsConfig
-	sserv.AllowInsecureAuth = tlsConfig == nil // require STARTTLS in production
+	sserv.AllowInsecureAuth = allowInsecure
 
 	go func() {
 		log.Printf("SMTP submission listening on %s", sserv.Addr)
@@ -53,14 +46,24 @@ func main() {
 		}
 	}()
 
-	// --- IMAP (993 implicit TLS, or 143 without TLS) ---
+	// --- IMAP (993 implicit TLS) ---
 	go func() {
 		addr := env("IMAP_ADDR", ":993")
 		log.Printf("IMAP listening on %s", addr)
-		if err := serveIMAP(api, addr, tlsConfig); err != nil {
+		if err := serveIMAP(api, addr, tlsConfig, allowInsecure); err != nil {
 			log.Fatalf("imap: %v", err)
 		}
 	}()
 
-	select {}
+	// --- HTTP health endpoint (for Coolify / Docker health checks) ---
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	addr := env("HEALTH_ADDR", ":8080")
+	log.Printf("health endpoint on %s/health", addr)
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		log.Fatalf("health: %v", err)
+	}
 }

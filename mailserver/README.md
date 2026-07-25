@@ -33,7 +33,9 @@ Apple Mail ──IMAP 993 / SMTP 587──▶ this service ──HTTPS /api/mail
 | `SMTP_ADDR` | `:587` | SMTP submission listen address |
 | `IMAP_ADDR` | `:993` | IMAP listen address |
 | `MAIL_DOMAIN` | `localhost` | SMTP greeting domain |
-| `TLS_CERT`, `TLS_KEY` | — | PEM cert + key. **Set both in production** (SMTP requires STARTTLS before auth; IMAP uses implicit TLS). Without them, auth is allowed in the clear — local testing only. |
+| `TLS_CERT`, `TLS_KEY` | — | PEM cert + key. Set both in production. **If omitted, a self-signed cert is generated in memory** so the service still starts with TLS (clients warn) — good for a first boot on Coolify. |
+| `HEALTH_ADDR` | `:8080` | HTTP `/health` endpoint for Coolify/Docker health checks |
+| `ALLOW_INSECURE_AUTH` | `false` | Allow auth without TLS (local testing only) |
 
 ## Run it
 
@@ -58,6 +60,31 @@ docker run -p 587:587 -p 993:993 \
 
 Or the optional compose file at the repo root: `docker compose -f
 docker-compose.mailserver.yml up -d`.
+
+## Coolify
+
+This service is Coolify-compatible and deploys **separately** from the Laravel
+app (add it as its own resource — the main app is untouched).
+
+1. **New Resource → Docker Compose**, point it at `docker-compose.mailserver.yml`
+   (or **Dockerfile** with *Base Directory* = `mailserver`).
+2. **Environment**: set `LARAVEL_API_URL` (your Laravel URL) and `MAIL_DOMAIN`.
+3. **Ports**: the compose maps `587` and `993` to the host. Coolify honours
+   these — no HTTP domain/proxy is attached (mail is raw TCP, and Cloudflare's
+   proxy / Traefik cannot terminate it). Leave the resource **without a public
+   domain**.
+4. **Health check**: the container exposes HTTP `/health` on `8080` and ships a
+   Docker `HEALTHCHECK`, so Coolify shows it healthy without an HTTP domain.
+5. **TLS**: for production, mount your `mail.mucan.dev` cert/key via a Coolify
+   volume/storage and set `TLS_CERT`/`TLS_KEY`. If you skip this, the service
+   boots with a **self-signed** cert (clients warn) so you can verify wiring
+   first.
+6. **DNS/firewall**: point `mail.mucan.dev` at the server with a **grey-cloud**
+   (DNS-only) record and make sure ports `587`/`993` are open on the host.
+
+> Note: Coolify's built-in proxy is for HTTP(S). It does not route `587`/`993`,
+> which is why this service binds those ports directly on the host instead of
+> going through the proxy.
 
 ## Deployment notes
 

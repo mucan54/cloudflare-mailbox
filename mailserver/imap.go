@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/tls"
 	"errors"
-	"net"
 	"strings"
 	"time"
 
@@ -25,19 +24,14 @@ var folders = map[string]string{
 	"Starred": "starred",
 }
 
-func serveIMAP(api *API, addr string, tlsConfig *tls.Config) error {
+func serveIMAP(api *API, addr string, tlsConfig *tls.Config, allowInsecure bool) error {
 	s := server.New(&imapBackend{api: api})
 	s.Addr = addr
-	s.AllowInsecureAuth = tlsConfig == nil
-	if tlsConfig != nil {
-		s.TLSConfig = tlsConfig
-		ln, err := tls.Listen("tcp", addr, tlsConfig)
-		if err != nil {
-			return err
-		}
-		return s.Serve(ln)
-	}
-	ln, err := net.Listen("tcp", addr)
+	s.TLSConfig = tlsConfig
+	s.AllowInsecureAuth = allowInsecure
+
+	// Implicit TLS on 993 (self-signed or real cert — always encrypted).
+	ln, err := tls.Listen("tcp", addr, tlsConfig)
 	if err != nil {
 		return err
 	}

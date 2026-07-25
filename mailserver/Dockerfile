@@ -11,6 +11,9 @@ RUN CGO_ENABLED=0 go build -trimpath -o /mailserver .
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates
 COPY --from=build /mailserver /usr/local/bin/mailserver
-# 587 = SMTP submission (STARTTLS), 993 = IMAP over TLS
-EXPOSE 587 993
+# 587 = SMTP submission (STARTTLS), 993 = IMAP over TLS, 8080 = HTTP health
+EXPOSE 587 993 8080
+# Coolify/Docker health check hits the tiny HTTP /health endpoint (busybox wget).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+	CMD wget -q -O- http://127.0.0.1:8080/health || exit 1
 ENTRYPOINT ["/usr/local/bin/mailserver"]
