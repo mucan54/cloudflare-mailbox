@@ -165,7 +165,7 @@ onBeforeUnmount(() => {
 
         <main class="main">
             <router-view v-slot="{ Component }">
-                <transition name="view" mode="out-in">
+                <transition name="view">
                     <component :is="Component" :key="route.fullPath" />
                 </transition>
             </router-view>
@@ -222,7 +222,7 @@ onBeforeUnmount(() => {
     </div>
 
     <router-view v-else v-slot="{ Component }">
-        <transition name="view" mode="out-in">
+        <transition name="view">
             <component :is="Component" :key="route.fullPath" />
         </transition>
     </router-view>
