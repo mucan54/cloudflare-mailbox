@@ -24,7 +24,6 @@ const pullDist = ref(0);
 const refreshing = ref(false);
 const isPulling = ref(false);
 let ptrStartY = 0;
-const PTR_THRESHOLD = 70;
 
 const titles = { inbox: 'Gelen kutusu', starred: 'Yıldızlı', sent: 'Gönderilenler', trash: 'Çöp kutusu' };
 const title = computed(() => titles[props.folder] || 'Gelen kutusu');
@@ -168,37 +167,46 @@ function dismissNotif() {
     sessionStorage.setItem('notif_dismissed', '1');
 }
 
-// ----- pull-to-refresh -----
+// ----- pull-to-refresh (tap-safe) -----
+// A pull is only "committed" after a clear downward drag past COMMIT px. Below
+// that we never call preventDefault, so normal taps (open email) fire on the
+// first tap and vertical scrolling is untouched.
+const PTR_COMMIT = 14;
+let ptrCandidate = false;
+
 function atTop() {
     const winTop = window.scrollY || document.documentElement.scrollTop || 0;
     const listTop = listEl.value ? listEl.value.scrollTop : 0;
     return winTop <= 0 && listTop <= 0;
 }
 function ptrStart(e) {
-    if (refreshing.value || !atTop()) {
-        isPulling.value = false;
-        return;
-    }
-    ptrStartY = e.touches[0].clientY;
-    isPulling.value = true;
+    ptrCandidate = !refreshing.value && e.touches.length === 1 && atTop();
+    ptrStartY = ptrCandidate ? e.touches[0].clientY : 0;
+    isPulling.value = false;
+    pullDist.value = 0;
 }
 function ptrMove(e) {
-    if (!isPulling.value) return;
+    if (!ptrCandidate) return;
     const dy = e.touches[0].clientY - ptrStartY;
-    if (dy <= 0 || !atTop()) {
-        pullDist.value = 0;
-        isPulling.value = false;
+    if (dy < PTR_COMMIT) return; // still a tap / not enough pull — leave it alone
+    if (!atTop()) {
+        ptrCandidate = false;
         return;
     }
-    pullDist.value = Math.min(96, dy * 0.5); // rubber-band resistance
-    if (pullDist.value > 4 && e.cancelable) e.preventDefault();
+    isPulling.value = true;
+    pullDist.value = Math.min(96, (dy - PTR_COMMIT) * 0.5); // rubber-band
+    if (e.cancelable) e.preventDefault();
 }
 async function ptrEnd() {
-    if (!isPulling.value) return;
+    ptrCandidate = false;
+    if (!isPulling.value) {
+        pullDist.value = 0;
+        return;
+    }
     isPulling.value = false;
-    if (pullDist.value >= PTR_THRESHOLD) {
+    if (pullDist.value >= 52) {
         refreshing.value = true;
-        pullDist.value = 52;
+        pullDist.value = 48;
         try {
             await load();
         } finally {
