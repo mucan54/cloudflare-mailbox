@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Domains\Tables;
 
 use App\Filament\Support\SendingDnsGuide;
 use App\Services\Cloudflare\CloudflareException;
+use App\Services\Cloudflare\MailClientDns;
 use App\Services\Cloudflare\RoutingManager;
 use App\Services\Cloudflare\WorkerDeployer;
 use Filament\Actions\Action;
@@ -32,6 +33,24 @@ class DomainsTable
                         'filament.sending-dns-guide',
                         SendingDnsGuide::build(Filament::getTenant(), $record),
                     )),
+
+                Action::make('mailClientDns')
+                    ->label('Mail istemci DNS')
+                    ->icon('heroicon-o-device-phone-mobile')
+                    ->color('gray')
+                    ->requiresConfirmation()
+                    ->modalDescription('Apple Mail/Outlook otomatik kurulumu için autodiscover/autoconfig/mail (CNAME) ve SRV kayıtlarını bu domaine ekler.')
+                    ->visible(fn ($record) => (bool) $record->zone_id && (bool) config('cloudflare.mail_client.enabled'))
+                    ->action(function ($record) {
+                        try {
+                            app(MailClientDns::class)->provision($record);
+                        } catch (\Throwable $e) {
+                            Notification::make()->title('DNS oluşturulamadı')->body($e->getMessage())->danger()->send();
+
+                            return;
+                        }
+                        Notification::make()->title('Mail istemci DNS kayıtları eklendi')->success()->send();
+                    }),
 
                 Action::make('catchAllToWorker')
                     ->label('Catch-all → Worker')

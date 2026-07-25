@@ -96,6 +96,24 @@ app (add it as its own resource — the main app is untouched).
   `mail.mucan.dev:587` (STARTTLS), username = full email, password = mailbox
   password.
 
+## Auto-configuration (autodiscover) & DNS
+
+The Laravel app serves mail-client autoconfig so clients set themselves up from
+just the email address:
+
+- Thunderbird / Apple Mail: `autoconfig.<domain>/mail/config-v1.1.xml`
+- Outlook: `autodiscover.<domain>/autodiscover/autodiscover.xml`
+
+Enable it with `MAIL_CLIENT_ACCESS=true` and set `MAIL_CLIENT_SERVER_HOST` to
+this bridge's host. Then, per domain, create the DNS records — either
+automatically (`MAIL_CLIENT_AUTO_DNS=true`, done on domain add) or from the
+admin panel's **Domains → "Mail istemci DNS"** action. It provisions, via the
+Cloudflare API:
+
+- `autodiscover.<domain>` / `autoconfig.<domain>` CNAME → app host (proxied)
+- `mail.<domain>` CNAME → `MAIL_CLIENT_SERVER_HOST` (grey-cloud, raw TCP)
+- `_imaps._tcp` / `_submission._tcp` SRV → `mail.<domain>`
+
 ## Scope / limitations
 
 - IMAP is **read + flags** (mark read/unread, star, move to trash). It is not a

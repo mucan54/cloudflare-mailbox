@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Jobs\ProvisionMailClientDns;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -13,6 +14,17 @@ class Domain extends Model
         'routing_enabled', 'sending_enabled', 'inbound_capture',
         'dns_records', 'last_synced_at',
     ];
+
+    protected static function booted(): void
+    {
+        // Optionally auto-create the mail-client DNS records when a domain is
+        // added (only when the native-mail feature is enabled).
+        static::created(function (Domain $domain): void {
+            if (config('cloudflare.mail_client.enabled') && config('cloudflare.mail_client.auto_dns')) {
+                ProvisionMailClientDns::dispatch($domain->id);
+            }
+        });
+    }
 
     protected function casts(): array
     {

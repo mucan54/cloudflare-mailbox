@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AutodiscoverController;
 use App\Http\Controllers\CalendarFeedController;
 use App\Http\Controllers\IncomingEmailController;
 use Illuminate\Support\Facades\Route;
@@ -11,6 +12,13 @@ Route::post('/api/cf/incoming', IncomingEmailController::class)
 // Read-only calendar subscription feed (Apple/Google Calendar). Token-authed.
 Route::get('/calendar/{token}.ics', CalendarFeedController::class)
     ->where('token', '[A-Za-z0-9]+');
+
+// Mail-client auto-configuration (optional native-mail feature). Defined before
+// the SPA catch-all so these exact paths win; the SPA's /mail/{id} still works.
+Route::get('/mail/config-v1.1.xml', [AutodiscoverController::class, 'mozilla']);
+Route::get('/.well-known/autoconfig/mail/config-v1.1.xml', [AutodiscoverController::class, 'mozilla']);
+Route::match(['get', 'post'], '/autodiscover/autodiscover.xml', [AutodiscoverController::class, 'outlook']);
+Route::match(['get', 'post'], '/Autodiscover/Autodiscover.xml', [AutodiscoverController::class, 'outlook']);
 
 // UI language switch (admin panel).
 Route::get('/locale/{locale}', function (string $locale) {
