@@ -40,6 +40,40 @@ class SendingDnsGuideTest extends TestCase
         $this->assertNull($guide['spf'], 'SPF present in API → no suggestion');
         $this->assertNotNull($guide['dmarc'], 'DMARC absent → suggested');
         $this->assertSame('_dmarc.seamai.net', $guide['dmarc']['name']);
+
+        // Auth-status summary: SPF present, DKIM + DMARC missing.
+        $this->assertSame(['spf' => true, 'dkim' => false, 'dmarc' => false], $guide['auth_status']);
+    }
+
+    public function test_detects_dkim_record_in_auth_status(): void
+    {
+        Http::fake([
+            '*/email/routing/dns' => Http::response([
+                'success' => true, 'errors' => [], 'result' => [
+                    ['type' => 'CNAME', 'name' => 'cf2024-1._domainkey.seamai.net', 'content' => 'cf2024-1.dkim.cloudflare.net'],
+                    ['type' => 'TXT', 'name' => '_dmarc.seamai.net', 'content' => 'v=DMARC1; p=none'],
+                ],
+            ]),
+        ]);
+
+        [$account, $domain] = $this->domain();
+        $guide = SendingDnsGuide::build($account, $domain);
+
+        $this->assertTrue($guide['auth_status']['dkim'], 'DKIM CNAME detected');
+        $this->assertTrue($guide['auth_status']['dmarc']);
+        $this->assertFalse($guide['auth_status']['spf']);
+    }
+
+    public function test_auth_status_is_null_when_records_unavailable(): void
+    {
+        Http::fake([
+            '*/email/routing/dns' => Http::response(['success' => false, 'errors' => [['message' => 'boom']]], 500),
+        ]);
+
+        [$account, $domain] = $this->domain();
+        $guide = SendingDnsGuide::build($account, $domain);
+
+        $this->assertNull($guide['auth_status'], 'no false negatives when the fetch failed');
     }
 
     public function test_auth_error_falls_back_to_spf_and_dmarc_suggestions(): void

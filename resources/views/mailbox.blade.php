@@ -2,7 +2,9 @@
 <html lang="tr">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    {{-- Lock scale so tapping/double-tapping never zooms — native app feel. The
+         16px input rule already blocks focus-zoom; this covers pinch/double-tap. --}}
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#171a21" media="(prefers-color-scheme: dark)">
     <meta name="mobile-web-app-capable" content="yes">

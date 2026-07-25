@@ -95,7 +95,20 @@ function onSwMessage(e) {
     }
     if (e.data?.type === 'open-mail' && e.data.url) router.push(e.data.url);
 }
-watch(() => auth.totalUnread, (n) => { document.title = n > 0 ? `(${n}) Mailbox` : 'Mailbox'; }, { immediate: true });
+// Mirror the unread count in the tab title and, on installed PWAs, the app
+// icon badge (Badging API — supported on desktop Chrome/Edge and iOS 16.4+).
+function setAppBadge(n) {
+    try {
+        if (n > 0 && navigator.setAppBadge) navigator.setAppBadge(n);
+        else if (navigator.clearAppBadge) navigator.clearAppBadge();
+    } catch (_) {
+        // Badging unsupported or blocked — ignore.
+    }
+}
+watch(() => auth.totalUnread, (n) => {
+    document.title = n > 0 ? `(${n}) Mailbox` : 'Mailbox';
+    setAppBadge(n);
+}, { immediate: true });
 watch(() => auth.accounts.length, () => enablePushIfGranted(auth.accounts).catch(() => {}));
 onMounted(() => {
     ui.applyTheme();

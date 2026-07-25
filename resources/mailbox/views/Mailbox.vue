@@ -35,7 +35,14 @@ let ptrStartY = 0;
 // Reading pane (desktop)
 const selectedId = ref(null);
 const selectedAcc = ref('');
+const selectedType = ref('received');
 const cursor = ref(-1);
+
+// A row's kind. During a cross-folder search the list mixes received and sent,
+// so each item carries its own _type; otherwise it follows the current folder.
+function typeOf(e) {
+    return e._type || (isSent.value ? 'sent' : 'received');
+}
 
 const folderKeys = ['inbox', 'starred', 'sent', 'trash'];
 const title = computed(() => t(`nav.${props.folder}`) || t('nav.inbox'));
@@ -50,23 +57,42 @@ const headerAvatar = computed(() => {
 });
 
 function keyOf(e) {
-    return e._account + ':' + e.id;
+    return e._account + ':' + typeOf(e) + ':' + e.id;
 }
 
 const visible = computed(() => (onlyUnread.value && !isSent.value ? emails.value.filter((e) => !e.read) : emails.value));
 
+const bySentDesc = (a, b) => new Date(b.received_at || 0) - new Date(a.received_at || 0);
+
 async function fetchAll() {
     const scope = auth.scope();
+
+    // A search spans BOTH mailboxes (inbox + sent) across every account, no
+    // matter which folder is open, so nothing is missed.
+    if (ui.search) {
+        const batches = await Promise.all(
+            scope.flatMap((acc) => [
+                auth.api(acc.email).get('/emails', { params: { q: ui.search } })
+                    .then(({ data }) => (data.data ?? []).map((e) => ({ ...e, _account: acc.email, _type: 'received' })))
+                    .catch(() => []),
+                auth.api(acc.email).get('/sent', { params: { q: ui.search } })
+                    .then(({ data }) => (data.data ?? []).map((e) => ({ ...e, _account: acc.email, _type: 'sent' })))
+                    .catch(() => []),
+            ]),
+        );
+        return batches.flat().sort(bySentDesc);
+    }
+
     const path = isSent.value ? '/sent' : '/emails';
+    const type = isSent.value ? 'sent' : 'received';
     const batches = await Promise.all(
         scope.map(async (acc) => {
             const params = isSent.value ? {} : { folder: props.folder };
-            if (ui.search) params.q = ui.search;
             const { data } = await auth.api(acc.email).get(path, { params });
-            return (data.data ?? []).map((e) => ({ ...e, _account: acc.email }));
+            return (data.data ?? []).map((e) => ({ ...e, _account: acc.email, _type: type }));
         }),
     );
-    return batches.flat().sort((a, b) => new Date(b.received_at || 0) - new Date(a.received_at || 0));
+    return batches.flat().sort(bySentDesc);
 }
 
 async function load() {
@@ -124,10 +150,10 @@ const groups = computed(() => {
 });
 
 function who(e) {
-    return isSent.value ? (e.to_email || t('mail.noRecipient')) : (e.from_name || e.from_email);
+    return typeOf(e) === 'sent' ? (e.to_email || t('mail.noRecipient')) : (e.from_name || e.from_email);
 }
 function avatarSeed(e) {
-    return isSent.value ? (e.to_email || '') : (e.from_email || '');
+    return typeOf(e) === 'sent' ? (e.to_email || '') : (e.from_email || '');
 }
 function fmt(iso) {
     if (!iso) return '';
@@ -139,12 +165,14 @@ function fmt(iso) {
 
 function open(e) {
     cursor.value = visible.value.indexOf(e);
+    const type = typeOf(e);
     if (paneMode.value) {
         selectedId.value = e.id;
         selectedAcc.value = e._account;
-        e.read = true;
+        selectedType.value = type;
+        if (type !== 'sent') e.read = true;
     } else {
-        router.push({ path: `/mail/${e.id}`, query: { acc: e._account, type: isSent.value ? 'sent' : 'received' } });
+        router.push({ path: `/mail/${e.id}`, query: { acc: e._account, type } });
     }
 }
 
@@ -418,30 +446,31 @@ onBeforeUnmount(() => {
                     <div class="mb-group">{{ g.label }}</div>
                     <div
                         v-for="e in g.items"
-                        :key="e._account + ':' + e.id"
-                        :data-k="e._account + ':' + e.id"
+                        :key="keyOf(e)"
+                        :data-k="keyOf(e)"
                         class="mb-row"
-                        :class="{ unread: !e.read && !isSent, active: selectedId === e.id, picked: checked.has(e._account + ':' + e.id) }"
+                        :class="{ unread: !e.read && typeOf(e) !== 'sent', active: selectedId === e.id && selectedType === typeOf(e), picked: checked.has(keyOf(e)) }"
                         @click="open(e)"
                     >
-                        <button class="mb-check" :class="{ on: checked.has(e._account + ':' + e.id) }" @click.stop="toggleCheck(e)">
+                        <button class="mb-check" :class="{ on: checked.has(keyOf(e)) }" @click.stop="toggleCheck(e)">
                             <span class="mb-ava" :style="{ background: avatarColor(avatarSeed(e)) }">{{ initials(who(e)) }}</span>
                             <span class="mb-tick">✓</span>
                         </button>
                         <span class="mb-body">
                             <span class="mb-line1">
-                                <span class="mb-who"><span v-if="!e.read && !isSent" class="dot" />{{ who(e) }}</span>
+                                <span class="mb-who"><span v-if="!e.read && typeOf(e) !== 'sent'" class="dot" />{{ who(e) }}</span>
                                 <span class="mb-time">{{ fmt(e.received_at) }}</span>
                             </span>
                             <span class="mb-subject">
+                                <span v-if="ui.search && typeOf(e) === 'sent'" class="mb-acc">{{ t('nav.sent') }}</span>
                                 {{ e.subject || t('mail.noSubject') }}
                                 <span v-if="auth.isUnified" class="mb-acc">{{ e._account }}</span>
                             </span>
                             <span class="mb-snippet">{{ e.snippet }}</span>
                         </span>
                         <span class="mb-side">
-                            <span v-if="!isSent" class="mb-star" :class="{ on: e.starred }" @click.stop="toggleStar(e)">{{ e.starred ? '★' : '☆' }}</span>
-                            <span v-if="!isSent" class="mb-trash" :title="isTrash ? 'Geri al' : 'Sil'" @click.stop="trash(e)">{{ isTrash ? '↩︎' : '🗑' }}</span>
+                            <span v-if="typeOf(e) !== 'sent'" class="mb-star" :class="{ on: e.starred }" @click.stop="toggleStar(e)">{{ e.starred ? '★' : '☆' }}</span>
+                            <span v-if="typeOf(e) !== 'sent'" class="mb-trash" :title="isTrash ? 'Geri al' : 'Sil'" @click.stop="trash(e)">{{ isTrash ? '↩︎' : '🗑' }}</span>
                         </span>
                     </div>
                 </template>
@@ -461,7 +490,7 @@ onBeforeUnmount(() => {
                 v-if="selectedId"
                 :id="selectedId"
                 :acc="selectedAcc"
-                :type="isSent ? 'sent' : 'received'"
+                :type="selectedType"
                 embedded
                 @changed="onReaderChanged"
                 @close="selectedId = null"

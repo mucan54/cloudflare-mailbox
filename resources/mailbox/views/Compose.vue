@@ -192,7 +192,7 @@ async function send() {
             <div class="cp-field">
                 <span class="cp-lab">{{ t('compose.to') }}</span>
                 <div class="chips">
-                    <span v-for="(c, i) in to" :key="c" class="chip-tag">{{ c }} <button @click="removeChip(to, i)">×</button></span>
+                    <span v-for="(c, i) in to" :key="c" class="chip-tag">{{ c }} <button type="button" @pointerdown.prevent="removeChip(to, i)">×</button></span>
                     <input
                         v-model="toInput"
                         class="chip-in"
@@ -226,7 +226,7 @@ async function send() {
                 <div class="cp-field">
                     <span class="cp-lab">Cc</span>
                     <div class="chips">
-                        <span v-for="(c, i) in cc" :key="c" class="chip-tag">{{ c }} <button @click="removeChip(cc, i)">×</button></span>
+                        <span v-for="(c, i) in cc" :key="c" class="chip-tag">{{ c }} <button type="button" @pointerdown.prevent="removeChip(cc, i)">×</button></span>
                         <input v-model="ccInput" class="chip-in" type="text" inputmode="email" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="Cc"
                                @input="queryRecipients('cc')" @focus="queryRecipients('cc')"
                                @keydown.enter.prevent="onEnter('cc')" @keydown.down="sugNav('cc', 1, $event)" @keydown.up="sugNav('cc', -1, $event)"
@@ -241,7 +241,7 @@ async function send() {
                 <div class="cp-field">
                     <span class="cp-lab">Bcc</span>
                     <div class="chips">
-                        <span v-for="(c, i) in bcc" :key="c" class="chip-tag">{{ c }} <button @click="removeChip(bcc, i)">×</button></span>
+                        <span v-for="(c, i) in bcc" :key="c" class="chip-tag">{{ c }} <button type="button" @pointerdown.prevent="removeChip(bcc, i)">×</button></span>
                         <input v-model="bccInput" class="chip-in" type="text" inputmode="email" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="Bcc"
                                @input="queryRecipients('bcc')" @focus="queryRecipients('bcc')"
                                @keydown.enter.prevent="onEnter('bcc')" @keydown.down="sugNav('bcc', 1, $event)" @keydown.up="sugNav('bcc', -1, $event)"

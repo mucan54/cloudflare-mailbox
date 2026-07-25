@@ -3,8 +3,6 @@
 namespace App\Notifications;
 
 use App\Models\Email;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Str;
 use NotificationChannels\WebPush\WebPushChannel;
@@ -13,11 +11,13 @@ use NotificationChannels\WebPush\WebPushMessage;
 /**
  * Web Push "you have new mail" — delivered even when the browser is closed
  * (for installed PWAs). Targets the recipient Mailbox.
+ *
+ * Deliberately NOT ShouldQueue: it is dispatched from the already-queued
+ * StoreIncomingEmail job, so sending it inline avoids a second queue hop that
+ * could be dropped if the worker is unreliable.
  */
-class IncomingMailNotification extends Notification implements ShouldQueue
+class IncomingMailNotification extends Notification
 {
-    use Queueable;
-
     public function __construct(public Email $email) {}
 
     /**
@@ -45,7 +45,13 @@ class IncomingMailNotification extends Notification implements ShouldQueue
             ->badge('/icons/badge.png')
             ->body(Str::limit($this->email->subject ?: '(konu yok)', 80))
             ->tag('mail-'.$this->email->id)
-            ->data(['url' => $url, 'email_id' => $this->email->id])
+            ->data([
+                'url' => $url,
+                'email_id' => $this->email->id,
+                // Drives the app-icon badge when the push arrives with the app
+                // closed (Badging API, set from the service worker).
+                'unread' => $notifiable->emails()->whereNull('read_at')->count(),
+            ])
             ->options(['TTL' => 3600]);
     }
 }
