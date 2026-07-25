@@ -76,8 +76,15 @@ class StoreIncomingEmail implements ShouldQueue
         $this->storeAttachments($email, $p['attachments'] ?? []);
 
         // Web Push "you have new mail" — only when the mailbox has subscriptions.
+        // Sent inline (the notification is no longer ShouldQueue) so it rides on
+        // this already-queued job instead of a second, easily-dropped queue hop.
+        // A push failure must never fail the email-store job, so it's isolated.
         if ($mailbox && $mailbox->pushSubscriptions()->exists()) {
-            $mailbox->notify(new IncomingMailNotification($email));
+            try {
+                $mailbox->notify(new IncomingMailNotification($email));
+            } catch (\Throwable $e) {
+                \Log::warning('Web push notify failed', ['mailbox' => $mailbox->id, 'error' => $e->getMessage()]);
+            }
         }
     }
 
