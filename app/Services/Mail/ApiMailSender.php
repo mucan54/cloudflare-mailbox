@@ -28,7 +28,20 @@ class ApiMailSender implements MailSender
             return SendResult::delivered($result);
         }
 
-        return SendResult::queued($result);
+        if (! empty($result['queued'])) {
+            return SendResult::queued($result);
+        }
+
+        // Cloudflare returned success but accepted NO recipient (all buckets
+        // empty). The message was not sent — the recipient is almost always on
+        // the account's Suppressions list from a prior bounce/complaint. Do not
+        // mislabel this as "queued".
+        return SendResult::failed(
+            'Cloudflare hiçbir alıcıyı kabul etmedi — alıcı büyük ihtimalle Suppressions '
+            .'listesinde (önceki bounce/şikâyet). Cloudflare → Email Service → Email Sending → '
+            .'Suppressions’ı kontrol edip adresi kaldırın, ya da farklı bir alıcıyla deneyin.',
+            $result,
+        );
     }
 
     /**
