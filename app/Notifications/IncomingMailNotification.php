@@ -45,7 +45,13 @@ class IncomingMailNotification extends Notification
             ->badge('/icons/badge.png')
             ->body(Str::limit($this->email->subject ?: '(konu yok)', 80))
             ->tag('mail-'.$this->email->id)
-            ->data(['url' => $url, 'email_id' => $this->email->id])
+            ->data([
+                'url' => $url,
+                'email_id' => $this->email->id,
+                // Drives the app-icon badge when the push arrives with the app
+                // closed (Badging API, set from the service worker).
+                'unread' => $notifiable->emails()->whereNull('read_at')->count(),
+            ])
             ->options(['TTL' => 3600]);
     }
 }

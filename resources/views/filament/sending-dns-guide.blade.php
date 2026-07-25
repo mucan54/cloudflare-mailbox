@@ -74,6 +74,18 @@
     .dark .dnsg-note-warning { background: rgba(245,158,11,0.10); color: #fcd34d; border-color: rgba(245,158,11,0.30); }
     .dnsg-note-title { font-weight: 600; }
     .dnsg-note-sub { margin-top: 0.35rem; opacity: 0.9; }
+
+    /* Auth status summary */
+    .dnsg-status { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .dnsg-chk { display: inline-flex; align-items: center; gap: 0.4rem; border-radius: 0.6rem; padding: 0.4rem 0.7rem; font-size: 0.8rem; font-weight: 600; border: 1px solid transparent; }
+    .dnsg-chk-ico { display: inline-grid; place-items: center; width: 1.15rem; height: 1.15rem; border-radius: 999px; font-size: 0.75rem; font-weight: 800; color: #fff; }
+    .dnsg-chk-pass { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+    .dnsg-chk-pass .dnsg-chk-ico { background: #16a34a; }
+    .dnsg-chk-fail { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+    .dnsg-chk-fail .dnsg-chk-ico { background: #dc2626; }
+    .dark .dnsg-chk-pass { background: rgba(34,197,94,0.12); color: #86efac; border-color: rgba(34,197,94,0.30); }
+    .dark .dnsg-chk-fail { background: rgba(239,68,68,0.12); color: #fca5a5; border-color: rgba(239,68,68,0.30); }
+    .dnsg-chk-sub { font-weight: 500; opacity: 0.75; }
 </style>
 
 <div class="dnsg">
@@ -84,6 +96,29 @@
         DNS bölgesinde bulunması gerekir. Cloudflare nameserver’larını kullanıyorsanız çoğu otomatik
         eklenir; <b>DMARC’ı elle eklemeniz</b> gerekir.
     </p>
+
+    {{-- Sender-authentication check: SPF / DKIM / DMARC pass/fail at a glance --}}
+    @if ($auth_status)
+        <div>
+            <div class="dnsg-section-label">Kimlik doğrulama kontrolü</div>
+            <div class="dnsg-status">
+                @foreach (['spf' => 'SPF', 'dkim' => 'DKIM', 'dmarc' => 'DMARC'] as $k => $labelText)
+                    <span class="dnsg-chk {{ $auth_status[$k] ? 'dnsg-chk-pass' : 'dnsg-chk-fail' }}">
+                        <span class="dnsg-chk-ico">{{ $auth_status[$k] ? '✓' : '!' }}</span>
+                        {{ $labelText }}
+                        <span class="dnsg-chk-sub">{{ $auth_status[$k] ? 'var' : 'eksik' }}</span>
+                    </span>
+                @endforeach
+            </div>
+            @unless ($auth_status['dkim'])
+                <div class="dnsg-hint">
+                    <b>DKIM eksik</b> — Outlook/Gmail gönderen kimliğini doğrulayamadığında “doğrulanmamış
+                    gönderen” uyarısı verir. Cloudflare panelinde <b>Email → Email Sending → Onboard/DNS</b>
+                    adımındaki <code>_domainkey</code> kaydını bu bölgeye ekleyin.
+                </div>
+            @endunless
+        </div>
+    @endif
 
     @if ($error)
         <div class="dnsg-note dnsg-note-danger">

@@ -1,6 +1,6 @@
 // Mailbox PWA service worker (root scope). Handles install/activate, a tiny
 // app-shell cache, and Web Push notifications.
-const CACHE = 'mailbox-v5';
+const CACHE = 'mailbox-v6';
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
@@ -26,6 +26,18 @@ self.addEventListener('push', (event) => {
     } catch (_) {
         payload = { title: 'Yeni mail' };
     }
+    // Update the app-icon badge (Badging API) so a closed PWA still shows the
+    // unread count the notification carried.
+    const unread = payload.data && payload.data.unread;
+    if (typeof unread === 'number' && self.navigator) {
+        try {
+            if (unread > 0 && self.navigator.setAppBadge) self.navigator.setAppBadge(unread);
+            else if (self.navigator.clearAppBadge) self.navigator.clearAppBadge();
+        } catch (_) {
+            // ignore
+        }
+    }
+
     event.waitUntil(
         Promise.all([
             self.registration.showNotification(payload.title || 'Yeni mail', {
