@@ -1,6 +1,6 @@
 // Mailbox PWA service worker (root scope). Handles install/activate, a tiny
 // app-shell cache, and Web Push notifications.
-const CACHE = 'mailbox-v7';
+const CACHE = 'mailbox-v8';
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
@@ -8,15 +8,53 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-    event.waitUntil(self.clients.claim());
+    event.waitUntil((async () => {
+        // Drop previous caches so a new build never serves an old build's shell
+        // or assets.
+        const keys = await caches.keys();
+        await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+        await self.clients.claim();
+    })());
 });
 
 self.addEventListener('fetch', (event) => {
     const req = event.request;
-    if (req.method !== 'GET' || new URL(req.url).pathname.startsWith('/api/')) return;
-    event.respondWith(
-        fetch(req).catch(() => caches.match(req).then((r) => r || caches.match('/'))),
-    );
+    if (req.method !== 'GET') return;
+
+    const url = new URL(req.url);
+    if (url.origin !== self.location.origin) return; // leave cross-origin alone
+    if (url.pathname.startsWith('/api/')) return; // never cache the API
+
+    // Page navigations: network-first so a fresh deploy loads immediately; fall
+    // back to the cached shell only when genuinely offline.
+    if (req.mode === 'navigate') {
+        event.respondWith((async () => {
+            try {
+                return await fetch(req);
+            } catch (_) {
+                return (await caches.match('/')) || Response.error();
+            }
+        })());
+        return;
+    }
+
+    // Assets (hashed JS/CSS/images): cache-first, then network. CRITICAL: on a
+    // failed asset we return a network error, NEVER the HTML shell — returning
+    // HTML for a <script>/<link> is exactly what caused the white screen.
+    event.respondWith((async () => {
+        const cached = await caches.match(req);
+        if (cached) return cached;
+        try {
+            const res = await fetch(req);
+            if (res && res.ok && res.type === 'basic') {
+                const clone = res.clone();
+                caches.open(CACHE).then((c) => c.put(req, clone)).catch(() => {});
+            }
+            return res;
+        } catch (_) {
+            return Response.error();
+        }
+    })());
 });
 
 self.addEventListener('push', (event) => {
