@@ -6,7 +6,7 @@ import { useUi } from './stores/ui';
 import { initials, avatarColor } from './avatar';
 import { t, i18n, setLocale, AVAILABLE } from './i18n';
 import {
-    enablePushIfGranted, notificationPermission, pushSupported, requestAndSubscribe, vapidKey,
+    enablePushIfGranted, pushPermission, pushSupported, refreshPushPermission, requestAndSubscribe, vapidKey,
 } from './push';
 
 const auth = useAuth();
@@ -78,22 +78,40 @@ async function signOut(email) {
 // settings
 const settingsOpen = ref(false);
 
-// notifications
-const notifState = ref(notificationPermission());
-const canPrompt = computed(() => pushSupported() && !!vapidKey() && notifState.value === 'default' && auth.isAuthenticated);
+// notifications — shared permission state so a second (stale) prompt can't show
+const canPrompt = computed(() => pushSupported() && !!vapidKey() && pushPermission.value === 'default' && auth.isAuthenticated);
+const notifState = pushPermission;
 async function enableNotifications() {
     await requestAndSubscribe(auth.accounts);
-    notifState.value = notificationPermission();
+    refreshPushPermission();
 }
 
 // live updates
 let unreadTimer = null;
 function onSwMessage(e) {
     if (e.data?.type === 'new-mail') {
+        // A push just arrived — pull the new mail into the list immediately so
+        // it's there whether or not the user taps the notification.
         auth.refreshUnread().catch(() => {});
         window.dispatchEvent(new CustomEvent('mailbox:new-mail'));
     }
-    if (e.data?.type === 'open-mail' && e.data.url) router.push(e.data.url);
+    if (e.data?.type === 'open-mail' && e.data.url) openFromNotification(e.data.url);
+}
+
+// Tapping a notification: fetch first, then open the message. The mail may not
+// be in the app's list yet, so we switch to its account and trigger a refresh
+// before navigating to the detail (the reader also fetches it by id directly).
+function openFromNotification(url) {
+    try {
+        const q = new URL(url, window.location.origin).searchParams;
+        const acc = q.get('acc');
+        if (acc && auth.accountByEmail(acc)) auth.setActive(acc);
+    } catch (_) {
+        // ignore malformed url
+    }
+    auth.refreshUnread().catch(() => {});
+    window.dispatchEvent(new CustomEvent('mailbox:new-mail'));
+    router.push(url);
 }
 // Mirror the unread count in the tab title and, on installed PWAs, the app
 // icon badge (Badging API — supported on desktop Chrome/Edge and iOS 16.4+).
@@ -114,7 +132,9 @@ watch(() => auth.accounts.length, () => enablePushIfGranted(auth.accounts).catch
 // endpoints rotate and can go stale while the app is backgrounded, which is a
 // common cause of "notifications just stopped".
 function onVisible() {
-    if (document.visibilityState !== 'visible' || !auth.isAuthenticated) return;
+    if (document.visibilityState !== 'visible') return;
+    refreshPushPermission();
+    if (!auth.isAuthenticated) return;
     auth.refreshUnread().catch(() => {});
     enablePushIfGranted(auth.accounts).catch(() => {});
 }

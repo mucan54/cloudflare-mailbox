@@ -20,11 +20,17 @@ class PushController extends Controller
             'contentEncoding' => ['nullable', 'string'],
         ]);
 
-        $request->user()->updatePushSubscription(
-            $data['endpoint'],
-            $data['keys']['p256dh'],
-            $data['keys']['auth'],
-            $data['contentEncoding'] ?? null,
+        // Scoped to THIS mailbox — never touches another mailbox's row for the
+        // same device, so one device stays registered under every account.
+        // (The package's updatePushSubscription would reassign a shared endpoint
+        // to a single owner, starving the other accounts of notifications.)
+        $request->user()->pushSubscriptions()->updateOrCreate(
+            ['endpoint' => $data['endpoint']],
+            [
+                'public_key' => $data['keys']['p256dh'],
+                'auth_token' => $data['keys']['auth'],
+                'content_encoding' => $data['contentEncoding'] ?: 'aes128gcm',
+            ],
         );
 
         return response()->json(['ok' => true]);
@@ -34,7 +40,8 @@ class PushController extends Controller
     {
         $endpoint = $request->validate(['endpoint' => ['required', 'string']])['endpoint'];
 
-        $request->user()->deletePushSubscription($endpoint);
+        // Only remove this mailbox's registration for the device, not others'.
+        $request->user()->pushSubscriptions()->where('endpoint', $endpoint)->delete();
 
         return response()->json(['ok' => true]);
     }
@@ -89,21 +96,33 @@ class PushController extends Controller
         $pruned = 0;
         $errors = [];
 
-        foreach ($webPush->flush() as $report) {
-            if ($report->isSuccess()) {
-                $sent++;
+        try {
+            foreach ($webPush->flush() as $report) {
+                if ($report->isSuccess()) {
+                    $sent++;
 
-                continue;
+                    continue;
+                }
+
+                $failed++;
+                $status = $report->getResponse()?->getStatusCode();
+                $errors[] = trim(($status ? $status.' ' : '').$report->getReason());
+
+                // Drop endpoints the push service has retired so future sends skip them.
+                if ($report->isSubscriptionExpired()) {
+                    $mailbox->pushSubscriptions()->where('endpoint', $report->getEndpoint())->delete();
+                    $pruned++;
+                }
             }
-
-            $failed++;
-            $errors[] = $report->getReason();
-
-            // Drop endpoints the push service has retired so future sends skip them.
-            if ($report->isSubscriptionExpired()) {
-                $mailbox->pushSubscriptions()->where('endpoint', $report->getEndpoint())->delete();
-                $pruned++;
-            }
+        } catch (\Throwable $e) {
+            // VAPID signing / encryption blows up here (e.g. a malformed key)
+            // — return the reason instead of a 500 so the user can see it.
+            return response()->json([
+                'sent' => 0,
+                'failed' => $subs->count(),
+                'reason' => 'exception',
+                'message' => $e->getMessage(),
+            ], 200);
         }
 
         return response()->json([

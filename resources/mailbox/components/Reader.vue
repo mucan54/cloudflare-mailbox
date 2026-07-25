@@ -23,7 +23,7 @@ const account = computed(() => props.acc || auth.current?.email);
 const email = ref(null);
 const loading = ref(true);
 
-async function load() {
+async function load(retry = 1) {
     loading.value = true;
     email.value = null;
     const path = isSent.value ? `/sent/${props.id}` : `/emails/${props.id}`;
@@ -31,13 +31,19 @@ async function load() {
         const { data } = await auth.api(account.value).get(path);
         email.value = data.email;
         if (!isSent.value) auth.refreshUnread();
-    } catch (_) {
+    } catch (e) {
+        // Opened straight from a notification the message may not be readable
+        // for a beat (session/replication race) — retry once before giving up.
+        if (retry > 0 && e.response?.status !== 403) {
+            await new Promise((r) => setTimeout(r, 600));
+            return load(retry - 1);
+        }
         email.value = null;
     } finally {
         loading.value = false;
     }
 }
-watch(() => [props.id, props.acc, props.type], load, { immediate: true });
+watch(() => [props.id, props.acc, props.type], () => load(), { immediate: true });
 
 // Fetch the attachment through the authenticated API as a blob so downloads
 // work on any storage disk (not just those that mint signed URLs).

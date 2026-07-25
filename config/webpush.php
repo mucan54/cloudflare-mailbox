@@ -23,8 +23,11 @@ return [
                 ? 'mailto:'.$subject
                 : (env('APP_URL') ?: 'https://localhost');
         })(),
-        'public_key' => env('VAPID_PUBLIC_KEY'),
-        'private_key' => env('VAPID_PRIVATE_KEY'),
+        // trim(): a stray space/newline pasted into the env corrupts the
+        // base64url key, which makes the VAPID JWT signature invalid and the
+        // push service reject every push with 403 — a silent, common failure.
+        'public_key' => trim((string) env('VAPID_PUBLIC_KEY')) ?: null,
+        'private_key' => trim((string) env('VAPID_PRIVATE_KEY')) ?: null,
         'pem_file' => env('VAPID_PEM_FILE'),
     ],
 

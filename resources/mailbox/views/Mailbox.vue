@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router';
 import { useAuth } from '../stores/auth';
 import { useUi } from '../stores/ui';
 import { initials, avatarColor } from '../avatar';
-import { pushSupported, notificationPermission, requestAndSubscribe, vapidKey } from '../push';
+import { pushSupported, pushPermission, refreshPushPermission, requestAndSubscribe, vapidKey } from '../push';
 import { useIsDesktop } from '../useMedia';
 import { t, localeTag } from '../i18n';
 import Reader from '../components/Reader.vue';
@@ -329,13 +329,13 @@ function onKey(ev) {
     else if ((k === 'e' || k === 'E' || k === 'Delete' || k === '#') && !isSent.value) { trash(cur); }
 }
 
-// notification banner (mobile-first, shown anywhere)
-const notifState = ref(notificationPermission());
+// notification banner (mobile-first) — shares the global permission state so
+// it hides the moment notifications are enabled anywhere else.
 const notifDismissed = ref(sessionStorage.getItem('notif_dismissed') === '1');
-const showNotifBanner = computed(() => props.folder === 'inbox' && pushSupported() && !!vapidKey() && notifState.value === 'default' && !notifDismissed.value);
+const showNotifBanner = computed(() => props.folder === 'inbox' && pushSupported() && !!vapidKey() && pushPermission.value === 'default' && !notifDismissed.value);
 async function enableNotif() {
     await requestAndSubscribe(auth.accounts);
-    notifState.value = notificationPermission();
+    refreshPushPermission();
 }
 function dismissNotif() {
     notifDismissed.value = true;
