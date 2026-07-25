@@ -41,10 +41,8 @@ svg { width: 100%; height: 100%; display: block; }
     width: 44px;
     height: 44px;
     min-width: 44px;
-    flex: 0 0 44px;
-    flex-shrink: 0;
-    align-self: flex-start;
-    aspect-ratio: 1 / 1;
+    max-width: 44px;
+    flex: none;
     border-radius: 50%;
     color: #fff;
     font-weight: 700;
@@ -53,8 +51,8 @@ svg { width: 100%; height: 100%; display: block; }
     letter-spacing: .3px;
     overflow: hidden;
 }
-.ava.sm { width: 38px; height: 38px; min-width: 38px; flex-basis: 38px; font-size: 14px; align-self: center; }
-.ava.lg { width: 52px; height: 52px; min-width: 52px; flex-basis: 52px; font-size: 18px; align-self: center; }
+.ava-sm { width: 38px; height: 38px; min-width: 38px; max-width: 38px; font-size: 14px; }
+.ava-lg { width: 52px; height: 52px; min-width: 52px; max-width: 52px; font-size: 18px; }
 
 .pill {
     background: var(--primary);
@@ -507,7 +505,7 @@ svg { width: 100%; height: 100%; display: block; }
 /* ======================================================================
    LOGIN
    ====================================================================== */
-.lg {
+.login {
     min-height: 100dvh;
     display: grid;
     place-items: center;

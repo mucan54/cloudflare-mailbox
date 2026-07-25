@@ -26,7 +26,7 @@ async function submit() {
 </script>
 
 <template>
-    <div class="lg">
+    <div class="login">
         <form class="lg-card" @submit.prevent="submit">
             <div class="lg-logo">📬</div>
             <h1 class="lg-title">{{ adding ? 'Hesap ekle' : 'Mailbox' }}</h1>

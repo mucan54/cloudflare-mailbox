@@ -80,7 +80,7 @@ const peerEmail = computed(() => (isSent.value ? email.value?.to_email : email.v
             <h2 class="rd-subject">{{ email.subject || '(konu yok)' }}</h2>
 
             <div class="rd-sender">
-                <span class="ava lg" :style="{ background: avatarColor(peerEmail) }">{{ initials(peer) }}</span>
+                <span class="ava ava-lg" :style="{ background: avatarColor(peerEmail) }">{{ initials(peer) }}</span>
                 <div class="rd-sender-meta">
                     <div class="rd-name">{{ peer }}</div>
                     <div class="rd-email">{{ peerEmail }}</div>

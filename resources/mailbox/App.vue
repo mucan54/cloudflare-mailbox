@@ -143,7 +143,7 @@ onBeforeUnmount(() => {
                     :class="{ active: auth.isUnified }"
                     @click="pickAccount(UNIFIED)"
                 >
-                    <span class="ava sm" style="background:#111827">∀</span>
+                    <span class="ava ava-sm" style="background:#111827">∀</span>
                     <span class="acct-meta"><b>Tüm hesaplar</b><small>Birleşik</small></span>
                     <span v-if="auth.totalUnread" class="pill">{{ auth.totalUnread }}</span>
                 </button>
@@ -154,7 +154,7 @@ onBeforeUnmount(() => {
                     :class="{ active: auth.active === a.email }"
                     @click="pickAccount(a.email)"
                 >
-                    <span class="ava sm" :style="{ background: avatarColor(a.email) }">{{ initials(a.display_name || a.email) }}</span>
+                    <span class="ava ava-sm" :style="{ background: avatarColor(a.email) }">{{ initials(a.display_name || a.email) }}</span>
                     <span class="acct-meta"><b>{{ a.display_name || a.email }}</b><small>{{ a.email }}</small></span>
                     <span v-if="a.unread" class="pill">{{ a.unread }}</span>
                 </button>
@@ -202,13 +202,13 @@ onBeforeUnmount(() => {
                         :class="{ active: auth.isUnified }"
                         @click="pickAccount(UNIFIED)"
                     >
-                        <span class="ava sm" style="background:#111827">∀</span>
+                        <span class="ava ava-sm" style="background:#111827">∀</span>
                         <span class="acct-meta"><b>Tüm hesaplar</b><small>Birleşik görünüm</small></span>
                         <span v-if="auth.totalUnread" class="pill">{{ auth.totalUnread }}</span>
                     </button>
                     <div v-for="a in auth.accounts" :key="a.email" class="acct-row" :class="{ active: auth.active === a.email }">
                         <button class="acct-pick" @click="pickAccount(a.email)">
-                            <span class="ava sm" :style="{ background: avatarColor(a.email) }">{{ initials(a.display_name || a.email) }}</span>
+                            <span class="ava ava-sm" :style="{ background: avatarColor(a.email) }">{{ initials(a.display_name || a.email) }}</span>
                             <span class="acct-meta"><b>{{ a.display_name || a.email }}</b><small>{{ a.email }}</small></span>
                         </button>
                         <button class="acct-signout" title="Çıkış" @click="signOut(a.email)">⏻</button>
