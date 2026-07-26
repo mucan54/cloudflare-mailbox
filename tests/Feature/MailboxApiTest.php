@@ -225,6 +225,29 @@ class MailboxApiTest extends TestCase
             ->assertJsonMissing(['subject' => 'InboxMail']);
     }
 
+    public function test_thread_merges_received_and_sent_by_normalized_subject(): void
+    {
+        $mailbox = $this->mailbox();
+        $acc = $mailbox->cloudflare_account_id;
+
+        // A received message and a reply we sent, plus an unrelated message.
+        $received = $mailbox->emails()->create(['cloudflare_account_id' => $acc, 'ingest_key' => 'k1', 'subject' => 'Test', 'text_body' => 'Test2', 'from_email' => 'peer@x.com', 'received_at' => now()->subMinutes(2)]);
+        $mailbox->sentEmails()->create(['cloudflare_account_id' => $acc, 'from_email' => 'me@a.com', 'to' => ['peer@x.com'], 'subject' => 'Re: Test', 'text_body' => 'Test3', 'sent_at' => now()->subMinute()]);
+        $mailbox->emails()->create(['cloudflare_account_id' => $acc, 'ingest_key' => 'k2', 'subject' => 'Unrelated', 'received_at' => now()]);
+
+        Sanctum::actingAs($mailbox);
+
+        $res = $this->getJson("/api/mailbox/emails/{$received->id}/thread")->assertOk();
+        $res->assertJsonCount(2, 'messages');
+        $res->assertJsonPath('messages.0.text_body', 'Test2');   // oldest first
+        $res->assertJsonPath('messages.0.type', 'received');
+        $res->assertJsonPath('messages.1.text_body', 'Test3');
+        $res->assertJsonPath('messages.1.type', 'sent');
+
+        // Opening the thread marks the received message read.
+        $this->assertNotNull($received->fresh()->read_at);
+    }
+
     public function test_move_email_to_trash_and_star(): void
     {
         $mailbox = $this->mailbox();

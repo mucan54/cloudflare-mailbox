@@ -16,7 +16,7 @@ export default {
         star: 'Star', selected: '{n} selected', movedToTrash: 'Message moved to Trash', restored: 'Message restored',
         movedN: '{n} messages moved', newMail: '{n} new messages ↑', selectToRead: 'Select a message to read',
         selectSub: 'Pick an item from the list on the left, or', composeLink: 'write a new message', attachments: 'attachments',
-        saveAll: 'Save all', quotedText: 'Quoted text',
+        saveAll: 'Save all', quotedText: 'Quoted text', you: 'You',
         items: '{n} items', unreadCount: '{n} unread', notFound: 'Message not found.', message: 'Message', sentItem: 'Sent',
     },
     compose: {

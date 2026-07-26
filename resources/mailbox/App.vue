@@ -17,6 +17,21 @@ const router = useRouter();
 const isLogin = computed(() => route.path === '/login');
 const showChrome = computed(() => auth.isAuthenticated && !isLogin.value);
 
+// Route transition. On a browser BACK gesture (iOS interactive swipe-back) the
+// OS already slides the previous page in; running our own fade on top re-shows
+// the just-dismissed detail and fades it out — the "blink". So we suppress the
+// transition for pop navigations and only fade on forward (push) navigations.
+const routeTransition = ref('view');
+function onPopState() {
+    routeTransition.value = 'novt';
+}
+router.afterEach(() => {
+    if (routeTransition.value === 'novt') {
+        // Restore the fade only after this pop navigation has painted.
+        requestAnimationFrame(() => { routeTransition.value = 'view'; });
+    }
+});
+
 const ICONS = {
     inbox: '<svg viewBox="0 0 24 24"><path d="M3 13l2.5-7A2 2 0 0 1 7.4 5h9.2a2 2 0 0 1 1.9 1.3L21 13v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M3 13h5l1 2h6l1-2h5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
     star: '<svg viewBox="0 0 24 24"><path d="M12 4l2.3 4.7 5.2.8-3.8 3.7.9 5.2L12 16.9 7.4 18.4l.9-5.2L4.5 9.5l5.2-.8L12 4Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
@@ -154,6 +169,7 @@ function onVisible() {
 }
 onMounted(() => {
     ui.applyTheme();
+    window.addEventListener('popstate', onPopState);
     if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', onSwMessage);
     document.addEventListener('visibilitychange', onVisible);
     if (auth.isAuthenticated) {
@@ -166,6 +182,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
     clearInterval(unreadTimer);
+    window.removeEventListener('popstate', onPopState);
     document.removeEventListener('visibilitychange', onVisible);
     if ('serviceWorker' in navigator) navigator.serviceWorker.removeEventListener('message', onSwMessage);
 });
@@ -251,7 +268,7 @@ onBeforeUnmount(() => {
 
             <main class="main">
                 <router-view v-slot="{ Component }">
-                    <transition name="view">
+                    <transition :name="routeTransition">
                         <component :is="Component" :key="route.fullPath" />
                     </transition>
                 </router-view>

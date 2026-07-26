@@ -25,6 +25,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/password', [AuthController::class, 'updatePassword']);
 
     Route::get('/emails', [InboxController::class, 'index']);
+    Route::get('/emails/{email}/thread', [InboxController::class, 'thread']);
     Route::get('/emails/{email}', [InboxController::class, 'show']);
     Route::patch('/emails/{email}', [InboxController::class, 'update']);
 

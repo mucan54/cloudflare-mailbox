@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Mailbox;
 
 use App\Http\Controllers\Controller;
 use App\Models\Email;
+use App\Models\SentEmail;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -71,6 +72,107 @@ class InboxController extends Controller
         $model->update($data);
 
         return response()->json(['email' => $this->summary($model->fresh())]);
+    }
+
+    /**
+     * All messages in the same conversation as $email — received + sent,
+     * merged and ordered oldest→newest — so the client can render an
+     * Outlook-style stacked thread. Grouping is by normalized subject
+     * (Re:/Fwd:/İlt: prefixes stripped), which matches how mail clients thread
+     * by default and works even when messages lack References headers.
+     */
+    public function thread(Request $request, int $email): JsonResponse
+    {
+        $user = $request->user();
+        $anchor = $user->emails()->findOrFail($email);
+        $norm = $this->normalizeSubject($anchor->subject);
+
+        if ($norm === '') {
+            // No meaningful subject to thread on — just this one message.
+            $anchor->loadMissing('attachments');
+            if (! $anchor->read_at) {
+                $anchor->update(['read_at' => now()]);
+            }
+
+            return response()->json([
+                'subject' => $anchor->subject,
+                'messages' => [$this->threadItem($anchor)],
+            ]);
+        }
+
+        // Narrow with a LIKE, then match on the exact normalized subject.
+        $received = $user->emails()->with('attachments')
+            ->where('folder', '!=', 'trash')
+            ->where('subject', 'like', '%'.$norm.'%')
+            ->get()
+            ->filter(fn (Email $e) => $this->normalizeSubject($e->subject) === $norm);
+
+        // Mark the whole conversation read as it's opened.
+        $received->each(function (Email $e) {
+            if (! $e->read_at) {
+                $e->update(['read_at' => now()]);
+            }
+        });
+
+        $sent = $user->sentEmails()->with('attachments')
+            ->where('subject', 'like', '%'.$norm.'%')
+            ->get()
+            ->filter(fn (SentEmail $s) => $this->normalizeSubject($s->subject) === $norm);
+
+        $messages = $received->map(fn (Email $e) => $this->threadItem($e))
+            ->concat($sent->map(fn (SentEmail $s) => $this->threadItemSent($s, $user->display_name, $user->email)))
+            ->sortBy(fn (array $m) => $m['received_at'] ?? '')
+            ->values();
+
+        return response()->json([
+            'subject' => $anchor->subject,
+            'messages' => $messages,
+        ]);
+    }
+
+    private function normalizeSubject(?string $s): string
+    {
+        $s = trim((string) $s);
+        do {
+            $prev = $s;
+            // Re:, Fw:, Fwd:, İlt:, Yan:, Ynt:, AW:, SV:, VS:, Antw:, WG:
+            $s = preg_replace('/^\s*(re|fwd?|ilt|yan|ynt|aw|sv|vs|antw|wg)\s*:\s*/iu', '', (string) $s);
+        } while ($s !== $prev);
+
+        return mb_strtolower(trim($s));
+    }
+
+    /** @return array<string, mixed> */
+    private function threadItem(Email $e): array
+    {
+        return array_merge($this->detail($e), ['type' => 'received', 'mine' => false]);
+    }
+
+    /** @return array<string, mixed> */
+    private function threadItemSent(SentEmail $s, ?string $fromName, string $fromEmail): array
+    {
+        return [
+            'id' => $s->id,
+            'type' => 'sent',
+            'mine' => true,
+            'from_email' => $s->from_email ?: $fromEmail,
+            'from_name' => $fromName,
+            'to_email' => is_array($s->to) ? implode(', ', $s->to) : (string) $s->to,
+            'cc' => $s->cc,
+            'subject' => $s->subject,
+            'snippet' => Str::limit(strip_tags((string) ($s->text_body ?: $s->html_body)), 140),
+            'html_body' => $s->html_body,
+            'text_body' => $s->text_body,
+            'read' => true,
+            'starred' => false,
+            'received_at' => $s->sent_at?->toIso8601String(),
+            'attachments' => $s->attachments->map(fn ($a) => [
+                'id' => $a->id,
+                'filename' => $a->filename,
+                'mime_type' => $a->mime_type,
+                'size' => $a->size,
+            ]),
+        ];
     }
 
     private function summary(Email $e): array
