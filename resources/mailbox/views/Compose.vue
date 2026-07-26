@@ -140,9 +140,19 @@ function hideSug() {
 function stripPrefix(s) {
     return (s || '').replace(/^(re|fwd|fw)\s*:\s*/i, '').trim();
 }
+// Build the quoted original with a clear separator line + header block (the
+// way Hotmail/Outlook do it), so the reply and the quoted message are visibly
+// divided instead of running together.
 function quote(o) {
     const when = o.received_at ? new Date(o.received_at).toLocaleString(localeTag()) : '';
-    return `\n\n----- ${t('compose.origMessage')} -----\n${t('compose.from2')}: ${o.from_name || ''} <${o.from_email || ''}>\n${t('compose.date')}: ${when}\n${t('mail.message')}: ${o.subject || ''}\n\n`
+    const toLine = o.to_email || (Array.isArray(o.to) ? o.to.join(', ') : (o.to || ''));
+    const fromName = o.from_name ? `${o.from_name} ` : '';
+    const sep = '________________________________';
+    return `\n\n${sep}\n`
+        + `${t('compose.from2')}: ${fromName}<${o.from_email || ''}>\n`
+        + `${t('compose.sentAt')}: ${when}\n`
+        + `${t('compose.to')}: ${toLine}\n`
+        + `${t('compose.subject')}: ${o.subject || ''}\n\n`
         + (o.text_body || (o.html_body ? o.html_body.replace(/<[^>]+>/g, '') : ''));
 }
 
@@ -195,12 +205,16 @@ async function send() {
     }
     busy.value = true;
     try {
+        // Render the plain-text separator line as a real <hr> in the HTML part.
+        const html = '<div>'
+            + body.value.split('\n').map((line) => (/^_{10,}\s*$/.test(line) ? '<hr>' : line)).join('<br>')
+            + '</div>';
         await auth.api(from.value).post('/send', {
             to: to.value,
             cc: cc.value,
             bcc: bcc.value,
             subject: subject.value || t('mail.noSubject'),
-            html: `<div>${body.value.replace(/\n/g, '<br>')}</div>`,
+            html,
             text: body.value,
             in_reply_to_email_id: inReplyTo.value,
             attachments: attachments.value,

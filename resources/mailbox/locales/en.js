@@ -22,7 +22,7 @@ export default {
     compose: {
         title: 'New message', from: 'From', to: 'To', subject: 'Subject', subjectPh: 'Subject', body: 'Write your message…',
         send: 'Send', ccbcc: 'Cc/Bcc', needRecipient: 'Add at least one recipient.', failed: 'Could not send.',
-        recipientPh: 'name@example.com', origMessage: 'Original message', from2: 'From', date: 'Date',
+        recipientPh: 'name@example.com', origMessage: 'Original message', from2: 'From', sentAt: 'Sent', date: 'Date',
         attach: 'Attach file', attachTooBig: 'Attachments cannot exceed 4.5 MB total.',
     },
     login: {

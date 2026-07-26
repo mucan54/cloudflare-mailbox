@@ -127,7 +127,7 @@ defineExpose({ reply, toggleStar, trash, markUnread });
                     :key="m.type + ':' + m.id"
                     :msg="m"
                     :acc="account"
-                    :expanded="i === messages.length - 1"
+                    :expanded="true"
                     :collapsible="messages.length > 1"
                 />
             </div>
