@@ -19,9 +19,16 @@ const bodyEl = ref(null);
 const hasQuote = ref(false);
 const showQuote = ref(false);
 
+// The display label is "Siz" for our own messages, but the AVATAR must reflect
+// the real person (their name/email) — not the word "Siz" (which would render
+// as "SI"). Colour is seeded from the email so each person is consistent.
 const who = computed(() => props.msg.mine ? t('mail.you') : (props.msg.from_name || props.msg.from_email || ''));
-const seed = computed(() => props.msg.mine ? (props.msg.from_email || '') : (props.msg.from_email || ''));
+const avatarName = computed(() => props.msg.from_name || props.msg.from_email || '?');
+const seed = computed(() => props.msg.from_email || '');
 const toLine = computed(() => props.msg.to_email || '');
+
+// Follow the parent's expanded intent when this card is (re)assigned a message.
+watch(() => props.msg.id, () => { open.value = props.expanded; });
 
 function fmt(iso) {
     if (!iso) return '';
@@ -170,7 +177,7 @@ defineExpose({ open });
 <template>
     <div class="msg" :class="{ open, collapsible }">
         <button type="button" class="msg-head" @click="toggleOpen">
-            <span class="ava" :style="{ background: avatarColor(seed) }">{{ initials(who) }}</span>
+            <span class="ava" :style="{ background: avatarColor(seed) }">{{ initials(avatarName) }}</span>
             <span class="msg-hmeta">
                 <span class="msg-line1">
                     <span class="msg-who">{{ who }}</span>
