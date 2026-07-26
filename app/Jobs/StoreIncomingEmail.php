@@ -8,6 +8,7 @@ use App\Models\Domain;
 use App\Models\Email;
 use App\Models\Mailbox;
 use App\Notifications\IncomingMailNotification;
+use App\Services\Calendar\IcsParser;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -75,6 +76,16 @@ class StoreIncomingEmail implements ShouldQueue
 
         $this->storeAttachments($email, $p['attachments'] ?? []);
 
+        // Auto-add any calendar invites (.ics) to the mailbox's calendar. Never
+        // let a bad invite break email storage.
+        if ($mailbox) {
+            try {
+                $this->importCalendarInvites($mailbox, $p['attachments'] ?? []);
+            } catch (\Throwable $e) {
+                \Log::warning('ICS import failed', ['mailbox' => $mailbox->id, 'error' => $e->getMessage()]);
+            }
+        }
+
         // Web Push "you have new mail" — only when the mailbox has subscriptions.
         // Sent inline (the notification is no longer ShouldQueue) so it rides on
         // this already-queued job instead of a second, easily-dropped queue hop.
@@ -98,6 +109,49 @@ class StoreIncomingEmail implements ShouldQueue
     protected function resolveMailbox(CloudflareAccount $account, ?string $toEmail): ?Mailbox
     {
         return $toEmail ? $account->mailboxes()->where('email', $toEmail)->first() : null;
+    }
+
+    /**
+     * Turn any .ics / text/calendar attachments into calendar events for the
+     * mailbox, de-duplicated by the invite UID.
+     *
+     * @param  array<int, array<string, mixed>>  $attachments
+     */
+    protected function importCalendarInvites(Mailbox $mailbox, array $attachments): void
+    {
+        foreach ($attachments as $a) {
+            $mime = strtolower((string) ($a['mimeType'] ?? $a['mime_type'] ?? ''));
+            $name = strtolower((string) ($a['filename'] ?? ''));
+            $isIcs = str_contains($mime, 'text/calendar') || str_ends_with($name, '.ics');
+            if (! $isIcs || empty($a['content'])) {
+                continue;
+            }
+
+            $raw = base64_decode((string) $a['content'], true);
+            if ($raw === false) {
+                continue;
+            }
+
+            foreach (app(IcsParser::class)->parse($raw) as $ev) {
+                if (! $ev['starts_at']) {
+                    continue;
+                }
+                $attrs = [
+                    'title' => $ev['title'],
+                    'location' => $ev['location'],
+                    'notes' => $ev['notes'],
+                    'starts_at' => $ev['starts_at'],
+                    'ends_at' => $ev['ends_at'],
+                    'all_day' => $ev['all_day'],
+                ];
+                // Dedup on UID when present so a re-sent invite updates in place.
+                if ($ev['uid']) {
+                    $mailbox->events()->updateOrCreate(['source_uid' => $ev['uid']], $attrs);
+                } else {
+                    $mailbox->events()->create($attrs);
+                }
+            }
+        }
     }
 
     /**

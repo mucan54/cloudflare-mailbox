@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuth } from '../stores/auth';
 import { useUi } from '../stores/ui';
@@ -37,6 +37,23 @@ async function saveProfile() {
         ui.toast(t('profile.saved'));
     } finally {
         busy.value = false;
+    }
+}
+
+// ----- calendar subscription feed -----
+const feedUrl = computed(() => auth.accountByEmail(email.value)?.calendar_feed_url || '');
+const webcalUrl = computed(() => feedUrl.value.replace(/^https?:\/\//, 'webcal://'));
+function copyFeed() {
+    const text = feedUrl.value;
+    if (!text) return;
+    const done = () => ui.toast(t('profile.feedCopied'));
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done).catch(() => {});
+    } else {
+        const el = document.createElement('textarea');
+        el.value = text; document.body.appendChild(el); el.select();
+        try { document.execCommand('copy'); done(); } catch (_) { /* ignore */ }
+        document.body.removeChild(el);
     }
 }
 
@@ -118,6 +135,16 @@ async function changePassword() {
                 </label>
                 <div class="settings-actions">
                     <button class="btn" :disabled="busy" @click="saveProfile">{{ t('profile.save') }}</button>
+                </div>
+            </section>
+
+            <section v-if="feedUrl" class="card">
+                <h2 class="card-title">{{ t('profile.calendarSync') }}</h2>
+                <p class="card-sub">{{ t('profile.calendarSyncHint') }}</p>
+                <code class="set-feed">{{ feedUrl }}</code>
+                <div class="settings-actions">
+                    <a class="btn" :href="webcalUrl">{{ t('profile.calendarSubscribe') }}</a>
+                    <button class="btn ghost" @click="copyFeed">{{ t('profile.copyLink') }}</button>
                 </div>
             </section>
 

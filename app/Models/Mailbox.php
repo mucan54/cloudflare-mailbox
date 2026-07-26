@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
 use NotificationChannels\WebPush\HasPushSubscriptions;
 
@@ -21,10 +22,20 @@ class Mailbox extends Authenticatable implements AuthenticatableContract
 
     protected $fillable = [
         'cloudflare_account_id', 'domain_id', 'email', 'display_name', 'signature',
-        'password', 'login_enabled', 'last_login_at',
+        'password', 'login_enabled', 'last_login_at', 'calendar_token',
     ];
 
-    protected $hidden = ['password', 'remember_token'];
+    protected $hidden = ['password', 'remember_token', 'calendar_token'];
+
+    /** Get (creating if needed) the secret token for this mailbox's .ics feed. */
+    public function calendarToken(): string
+    {
+        if (! $this->calendar_token) {
+            $this->forceFill(['calendar_token' => Str::random(48)])->save();
+        }
+
+        return $this->calendar_token;
+    }
 
     protected function casts(): array
     {

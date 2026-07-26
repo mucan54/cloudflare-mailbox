@@ -47,6 +47,7 @@ export const useAuth = defineStore('auth', {
                 token: data.token,
                 display_name: data.mailbox.display_name,
                 signature: data.mailbox.signature || '',
+                calendar_feed_url: data.mailbox.calendar_feed_url || '',
                 unread: data.mailbox.unread || 0,
             };
 

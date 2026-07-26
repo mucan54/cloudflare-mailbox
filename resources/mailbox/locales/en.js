@@ -66,6 +66,8 @@ export default {
         currentPassword: 'Current password', newPassword: 'New password', confirmPassword: 'New password (again)',
         changePassword: 'Change password', pwChanged: 'Password changed', pwMismatch: 'New passwords do not match.',
         open: 'Profile & settings', edit: 'Edit',
+        calendarSync: 'Calendar subscription', calendarSyncHint: 'Add this link to Apple/Google Calendar to sync your events (with a 30-min reminder). Read-only.',
+        calendarSubscribe: 'Add to calendar', copyLink: 'Copy link', feedCopied: 'Link copied',
         notifications: 'Notifications', notifHint: 'Send a test notification to this device to check that push is working.',
         testPush: 'Send test notification', testSent: 'Sent to {n} device(s) ✅', testFailed: 'Could not send notification.',
         testNoSub: 'This device isn’t registered — allow notifications first.', notifBlocked: 'Notification permission not granted.', testNoVapid: 'No VAPID key on the server.',

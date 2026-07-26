@@ -87,6 +87,7 @@ class AuthController extends Controller
             'display_name' => $mailbox->display_name,
             'signature' => $mailbox->signature,
             'unread' => $mailbox->emails()->whereNull('read_at')->count(),
+            'calendar_feed_url' => url('/calendar/'.$mailbox->calendarToken().'.ics'),
         ];
     }
 }
