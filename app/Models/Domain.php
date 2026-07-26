@@ -20,7 +20,8 @@ class Domain extends Model
         // Optionally auto-create the mail-client DNS records when a domain is
         // added (only when the native-mail feature is enabled).
         static::created(function (Domain $domain): void {
-            if (config('cloudflare.mail_client.enabled') && config('cloudflare.mail_client.auto_dns')) {
+            $clientAccess = config('cloudflare.mail_client.enabled') || config('cloudflare.mail_client.dav');
+            if ($clientAccess && config('cloudflare.mail_client.auto_dns')) {
                 ProvisionMailClientDns::dispatch($domain->id);
             }
         });

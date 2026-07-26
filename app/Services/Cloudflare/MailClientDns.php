@@ -40,6 +40,16 @@ class MailClientDns
             $records[] = $this->srv('_submission', $name, $smtpPort, $mailHost);
         }
 
+        // CalDAV/CardDAV are served by Laravel over HTTPS on the app host, so
+        // RFC 6764 SRV records point clients straight at it (port 443). The
+        // TXT record advertises the well-known path so a bare email suffices.
+        if (config('cloudflare.mail_client.dav') && $appHost !== '') {
+            $records[] = $this->srv('_caldavs', $name, 443, $appHost);
+            $records[] = $this->srv('_carddavs', $name, 443, $appHost);
+            $records[] = ['type' => 'TXT', 'name' => '_caldavs._tcp.'.$name, 'content' => 'path=/dav/', 'ttl' => 1];
+            $records[] = ['type' => 'TXT', 'name' => '_carddavs._tcp.'.$name, 'content' => 'path=/dav/', 'ttl' => 1];
+        }
+
         return $records;
     }
 

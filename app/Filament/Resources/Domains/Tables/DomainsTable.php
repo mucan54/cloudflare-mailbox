@@ -39,8 +39,8 @@ class DomainsTable
                     ->icon('heroicon-o-device-phone-mobile')
                     ->color('gray')
                     ->requiresConfirmation()
-                    ->modalDescription('Apple Mail/Outlook otomatik kurulumu için autodiscover/autoconfig/mail (CNAME) ve SRV kayıtlarını bu domaine ekler.')
-                    ->visible(fn ($record) => (bool) $record->zone_id && (bool) config('cloudflare.mail_client.enabled'))
+                    ->modalDescription('Apple Mail/Outlook otomatik kurulumu için autodiscover/autoconfig/mail (CNAME), takvim/kişi (CalDAV/CardDAV SRV) ve SRV kayıtlarını bu domaine ekler.')
+                    ->visible(fn ($record) => (bool) $record->zone_id && ((bool) config('cloudflare.mail_client.enabled') || (bool) config('cloudflare.mail_client.dav')))
                     ->action(function ($record) {
                         try {
                             app(MailClientDns::class)->provision($record);

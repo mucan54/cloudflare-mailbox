@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Contact extends Model
 {
-    protected $fillable = ['mailbox_id', 'name', 'email', 'phone', 'company', 'title', 'notes', 'favorite'];
+    protected $fillable = ['mailbox_id', 'name', 'email', 'phone', 'company', 'title', 'notes', 'favorite', 'dav_uri', 'dav_etag'];
 
     protected function casts(): array
     {

@@ -114,6 +114,32 @@ Cloudflare API:
 - `mail.<domain>` CNAME → `MAIL_CLIENT_SERVER_HOST` (grey-cloud, raw TCP)
 - `_imaps._tcp` / `_submission._tcp` SRV → `mail.<domain>`
 
+## Calendar & Contacts sync (CalDAV / CardDAV) — no bridge needed
+
+Unlike IMAP/SMTP (raw TCP), CalDAV and CardDAV are **HTTP-based**, so the Laravel
+app serves them itself at `/dav` (via `sabre/dav`) — behind Coolify/Cloudflare,
+over the normal HTTPS port, **with no extra service and no Docker**. This mirrors
+each mailbox's `events` and `contacts` into a native Calendar/Contacts account.
+
+Enable with `MAIL_CLIENT_DAV=true` (independent of the IMAP/SMTP bridge — you can
+run DAV alone). Then, per domain, the **Mail istemci DNS** action / `auto_dns`
+also provisions the RFC 6764 discovery records:
+
+- `_caldavs._tcp` / `_carddavs._tcp` SRV → app host (port 443)
+- matching `path=/dav/` TXT records
+
+Client setup:
+
+- **iOS / macOS (native):** install the per-mailbox profile at
+  `/mail/profile/<email>.mobileconfig` — one tap adds **Mail + Calendar +
+  Contacts** together (the closest a custom domain gets to Gmail's bundled
+  add-account). Or add a CalDAV/CardDAV account manually with just email +
+  password (SRV auto-discovery fills in the server).
+- **Android:** install **DAVx5**, enter email + password — it discovers `/dav`
+  via the same SRV/`.well-known` records. (Android has no built-in CalDAV.)
+- Auth is HTTP Basic (mailbox email + password); `/.well-known/caldav` and
+  `/.well-known/carddav` redirect to `/dav/`.
+
 ## Scope / limitations
 
 - IMAP is **read + flags** (mark read/unread, star, move to trash). It is not a

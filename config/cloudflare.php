@@ -57,6 +57,12 @@ return [
         'app_host' => env('MAIL_CLIENT_APP_HOST', parse_url((string) env('APP_URL'), PHP_URL_HOST) ?: 'localhost'),
         'imap_port' => (int) env('MAIL_CLIENT_IMAP_PORT', 993),
         'smtp_port' => (int) env('MAIL_CLIENT_SMTP_PORT', 587),
+
+        // CalDAV/CardDAV are served by Laravel itself over normal HTTPS (no
+        // extra ports), so they only need the app host. When enabled, /dav is
+        // mounted, RFC 6764 auto-discovery + SRV records are advertised and
+        // the per-mailbox .mobileconfig bundles Mail + Calendar + Contacts.
+        'dav' => (bool) env('MAIL_CLIENT_DAV', false),
     ],
 
     /*

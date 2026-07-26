@@ -23,9 +23,12 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\SetLocale::class,
         ]);
 
-        // The Cloudflare Email Worker posts here with its own HMAC signature.
+        // The Cloudflare Email Worker posts here with its own HMAC signature;
+        // CalDAV/CardDAV clients authenticate with HTTP Basic, not CSRF tokens.
         $middleware->validateCsrfTokens(except: [
             'api/cf/*',
+            'dav',
+            'dav/*',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
