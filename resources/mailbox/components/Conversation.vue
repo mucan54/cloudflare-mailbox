@@ -24,8 +24,6 @@ const subject = ref('');
 const messages = ref([]);
 const loading = ref(true);
 
-// Index of the newest message — expanded by default (the rest start collapsed).
-const lastIndex = computed(() => messages.value.length - 1);
 // The received messages in this thread (used for read/star/trash actions).
 const receivedIds = computed(() => messages.value.filter((m) => m.type === 'received').map((m) => m.id));
 // Newest message overall — the reply/star target.
@@ -129,7 +127,7 @@ defineExpose({ reply, toggleStar, trash, markUnread });
                     :key="m.type + ':' + m.id"
                     :msg="m"
                     :acc="account"
-                    :expanded="i === lastIndex"
+                    :expanded="true"
                     :collapsible="messages.length > 1"
                 />
             </div>
