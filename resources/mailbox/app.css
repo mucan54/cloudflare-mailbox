@@ -247,6 +247,24 @@ svg { width: 100%; height: 100%; display: block; }
 
 .rd-scroll { flex: 1; overflow-y: auto; padding: 16px 20px calc(20px + env(safe-area-inset-bottom)); }
 .rd-subject { font-size: 21px; font-weight: 600; margin: 0 0 14px; }
+
+/* ===== CONVERSATION (stacked thread) ===== */
+.cv-thread { display: flex; flex-direction: column; }
+.msg { border-top: 1px solid var(--line); padding: 14px 0 4px; }
+.msg:first-child { border-top: none; }
+.msg-head { display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left; background: none; border: none; padding: 0; cursor: default; }
+.msg.collapsible .msg-head { cursor: pointer; }
+.msg-head .ava { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 600; font-size: 14px; }
+.msg-hmeta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.msg-line1 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.msg-who { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msg-time { flex: none; font-size: 12.5px; color: var(--muted); }
+.msg-to { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msg-snip { font-size: 13.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msg-body-wrap { padding: 10px 0 6px 52px; }
+@media (max-width: 560px) { .msg-body-wrap { padding-left: 0; } }
+
+.mb-count { flex: none; margin-left: 6px; font-size: 11px; font-weight: 700; color: var(--muted); background: var(--panel-2); border-radius: 999px; padding: 0 7px; line-height: 17px; }
 .rd-sender { display: flex; align-items: center; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
 .rd-sender-meta { flex: 1; min-width: 0; }
 .rd-name { font-weight: 600; font-size: 14px; }

@@ -1,7 +1,7 @@
 <script setup>
 import { useRoute, useRouter } from 'vue-router';
 import { useAuth } from '../stores/auth';
-import Reader from '../components/Reader.vue';
+import Conversation from '../components/Conversation.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -22,7 +22,7 @@ function close() {
 </script>
 
 <template>
-    <Reader
+    <Conversation
         :id="route.params.id"
         :acc="route.query.acc || auth.current?.email || ''"
         :type="route.query.type || 'received'"

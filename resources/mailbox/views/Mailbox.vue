@@ -13,7 +13,7 @@ import { initials, avatarColor } from '../avatar';
 import { pushSupported, pushPermission, refreshPushPermission, requestAndSubscribe, vapidKey } from '../push';
 import { useIsDesktop } from '../useMedia';
 import { t, localeTag } from '../i18n';
-import Reader from '../components/Reader.vue';
+import Conversation from '../components/Conversation.vue';
 
 const props = defineProps({ folder: { type: String, default: 'inbox' } });
 const auth = useAuth();
@@ -69,6 +69,51 @@ function keyOf(e) {
 const visible = computed(() => (onlyUnread.value && !isSent.value ? emails.value.filter((e) => !e.read) : emails.value));
 
 const bySentDesc = (a, b) => new Date(b.received_at || 0) - new Date(a.received_at || 0);
+
+// ----- conversation threading (inbox/starred/trash, not sent or search) -----
+function stripRe(s) {
+    let out = (s || '').trim();
+    let prev;
+    do { prev = out; out = out.replace(/^\s*(re|fwd?|ilt|yan|ynt|aw|sv|vs|antw|wg)\s*:\s*/i, ''); } while (out !== prev);
+    return out.toLowerCase().trim();
+}
+function threadKeyOf(e) {
+    const norm = stripRe(e.subject);
+    // No real subject → don't group (unique per message).
+    return norm ? `${e._account}|${norm}` : `${e._account}|__${e.id}`;
+}
+const threaded = computed(() => !isSent.value && !ui.search);
+
+// Collapse `visible` into one representative row per conversation (the latest
+// message, since the list is sorted newest-first), keeping thread metadata
+// (count, member items, any-unread) keyed by the representative's row key.
+const threadData = computed(() => {
+    if (!threaded.value) return { reps: visible.value, meta: new Map() };
+    const meta = new Map();
+    const reps = [];
+    const index = new Map();
+    for (const e of visible.value) {
+        const tk = threadKeyOf(e);
+        if (!index.has(tk)) {
+            index.set(tk, e);
+            reps.push(e);
+            meta.set(keyOf(e), { count: 1, items: [e], unread: !e.read });
+        } else {
+            const m = meta.get(keyOf(index.get(tk)));
+            m.count++;
+            m.items.push(e);
+            if (!e.read) m.unread = true;
+        }
+    }
+    return { reps, meta };
+});
+const rows = computed(() => threadData.value.reps);
+function threadInfo(e) {
+    return threadData.value.meta.get(keyOf(e)) || { count: 1, items: [e], unread: !e.read };
+}
+function rowUnread(e) {
+    return typeOf(e) !== 'sent' && (threaded.value ? threadInfo(e).unread : !e.read);
+}
 
 async function fetchAll() {
     const scope = auth.scope();
@@ -156,7 +201,7 @@ function dayLabel(iso) {
 const groups = computed(() => {
     const out = [];
     let cur = null;
-    for (const e of visible.value) {
+    for (const e of rows.value) {
         const label = dayLabel(e.received_at);
         if (!cur || cur.label !== label) {
             cur = { label, items: [] };
@@ -182,10 +227,11 @@ function fmt(iso) {
 }
 
 function open(e) {
-    cursor.value = visible.value.indexOf(e);
+    cursor.value = rows.value.indexOf(e);
     const type = typeOf(e);
-    // Optimistically mark read so the cached list shows it read on return.
-    if (type !== 'sent') e.read = true;
+    // Optimistically mark the whole conversation read so the cached list shows
+    // it read on return.
+    if (type !== 'sent') threadInfo(e).items.forEach((m) => { m.read = true; });
     if (paneMode.value) {
         selectedId.value = e.id;
         selectedAcc.value = e._account;
@@ -206,19 +252,22 @@ async function toggleStar(e) {
     if (props.folder === 'starred' && !e.starred) emails.value = emails.value.filter((x) => x !== e);
 }
 async function trash(e) {
-    const from = e.folder || (isTrash.value ? 'trash' : 'inbox');
     const target = isTrash.value ? 'inbox' : 'trash';
-    emails.value = emails.value.filter((x) => x !== e);
-    if (selectedId.value === e.id) selectedId.value = null;
+    // Trashing a conversation row moves every message in it.
+    const items = threaded.value ? threadInfo(e).items.slice() : [e];
+    const froms = items.map((m) => ({ m, from: m.folder || (isTrash.value ? 'trash' : 'inbox') }));
+    const set = new Set(items);
+    emails.value = emails.value.filter((x) => !set.has(x));
+    if (items.some((m) => selectedId.value === m.id)) selectedId.value = null;
     try {
-        await auth.api(e._account).patch(`/emails/${e.id}`, { folder: target });
+        await Promise.all(items.map((m) => auth.api(m._account).patch(`/emails/${m.id}`, { folder: target })));
         auth.refreshUnread();
     } catch (_) {
         load();
         return;
     }
     ui.toast(isTrash.value ? t('mail.restored') : t('mail.movedToTrash'), async () => {
-        await auth.api(e._account).patch(`/emails/${e.id}`, { folder: from }).catch(() => {});
+        await Promise.all(froms.map(({ m, from }) => auth.api(m._account).patch(`/emails/${m.id}`, { folder: from }).catch(() => {})));
         auth.refreshUnread();
         load();
     });
@@ -323,7 +372,7 @@ async function ptrEnd() {
 
 // ----- keyboard shortcuts -----
 function moveCursor(delta) {
-    const list = visible.value;
+    const list = rows.value;
     if (!list.length) return;
     cursor.value = Math.min(Math.max(cursor.value + delta, 0), list.length - 1);
     const e = list[cursor.value];
@@ -340,7 +389,7 @@ function onKey(ev) {
     if (k === 'n' || k === 'N') { ev.preventDefault(); router.push('/compose'); return; }
     if (k === 'j' || k === 'J') { ev.preventDefault(); moveCursor(1); return; }
     if (k === 'k' || k === 'K') { ev.preventDefault(); moveCursor(-1); return; }
-    const cur = cursor.value >= 0 ? visible.value[cursor.value] : null;
+    const cur = cursor.value >= 0 ? rows.value[cursor.value] : null;
     if (!cur) return;
     if (k === 'Enter') { open(cur); }
     else if (k === 'u' || k === 'U') { toggleRead(cur); }
@@ -468,7 +517,7 @@ onBeforeUnmount(() => {
                         :key="keyOf(e)"
                         :data-k="keyOf(e)"
                         class="mb-row"
-                        :class="{ unread: !e.read && typeOf(e) !== 'sent', active: selectedId === e.id && selectedType === typeOf(e), picked: checked.has(keyOf(e)) }"
+                        :class="{ unread: rowUnread(e), active: selectedId === e.id && selectedType === typeOf(e), picked: checked.has(keyOf(e)) }"
                         @click="open(e)"
                     >
                         <button class="mb-check" :class="{ on: checked.has(keyOf(e)) }" @click.stop="toggleCheck(e)">
@@ -477,7 +526,7 @@ onBeforeUnmount(() => {
                         </button>
                         <span class="mb-body">
                             <span class="mb-line1">
-                                <span class="mb-who"><span v-if="!e.read && typeOf(e) !== 'sent'" class="dot" />{{ who(e) }}</span>
+                                <span class="mb-who"><span v-if="rowUnread(e)" class="dot" />{{ who(e) }}<span v-if="threadInfo(e).count > 1" class="mb-count">{{ threadInfo(e).count }}</span></span>
                                 <span class="mb-time">{{ fmt(e.received_at) }}</span>
                             </span>
                             <span class="mb-subject">
@@ -505,7 +554,7 @@ onBeforeUnmount(() => {
 
         <!-- READING PANE (desktop) -->
         <div v-if="paneMode" class="mb-pane">
-            <Reader
+            <Conversation
                 v-if="selectedId"
                 :id="selectedId"
                 :acc="selectedAcc"
