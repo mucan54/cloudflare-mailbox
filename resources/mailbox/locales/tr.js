@@ -15,7 +15,8 @@ export default {
         to: 'Kime: {v}', toShort: 'Kime', reply: 'Yanıtla', replyAll: 'Tümünü yanıtla', forward: 'İlet', markUnread: 'Okunmadı yap',
         star: 'Yıldızla', selected: '{n} seçili', movedToTrash: 'İleti çöp kutusuna taşındı', restored: 'İleti geri alındı',
         movedN: '{n} ileti taşındı', newMail: '{n} yeni ileti ↑', selectToRead: 'Okumak için bir ileti seçin',
-        selectSub: 'Soldaki listeden bir öğe seçin veya', composeLink: 'yeni ileti yazın', attachments: 'Ekler',
+        selectSub: 'Soldaki listeden bir öğe seçin veya', composeLink: 'yeni ileti yazın', attachments: 'Ek',
+        saveAll: 'Ekleri kaydet', quotedText: 'Alıntılanan metin',
         items: '{n} öğe', unreadCount: '{n} okunmamış', notFound: 'İleti bulunamadı.', message: 'İleti', sentItem: 'Gönderilen',
     },
     compose: {
