@@ -13,11 +13,11 @@ const props = defineProps({
     collapsible: { type: Boolean, default: false },
 });
 
+const emit = defineEmits(['expand']);
 const auth = useAuth();
 const open = ref(props.expanded);
 const bodyEl = ref(null);
 const hasQuote = ref(false);
-const showQuote = ref(false);
 
 // The display label is "Siz" for our own messages, but the AVATAR must reflect
 // the real person (their name/email) — not the word "Siz" (which would render
@@ -122,25 +122,18 @@ function collapseHtmlQuote() {
     }
     if (!quoteNodes.length) return;
     hasQuote.value = true;
-    applyQuoteVisibility();
-}
-function applyQuoteVisibility() {
+    // The card always shows only the lead; the full body (incl. quotes) opens
+    // in a modal via the "•••" button. So the quote stays hidden here.
     for (const n of quoteNodes) {
-        if (n.nodeType === 1) n.style.display = showQuote.value ? '' : 'none';
-        else if (n.nodeType === 3) {
-            if (!n.__wrap) {
-                const span = document.createElement('span');
-                n.parentNode?.insertBefore(span, n);
-                span.appendChild(n);
-                n.__wrap = span;
-            }
-            n.__wrap.style.display = showQuote.value ? '' : 'none';
+        if (n.nodeType === 1) n.style.display = 'none';
+        else if (n.nodeType === 3 && !n.__wrap) {
+            const span = document.createElement('span');
+            span.style.display = 'none';
+            n.parentNode?.insertBefore(span, n);
+            span.appendChild(n);
+            n.__wrap = span;
         }
     }
-}
-function toggleQuote() {
-    showQuote.value = !showQuote.value;
-    if (props.msg.html_body) applyQuoteVisibility();
 }
 
 const textSplit = computed(() => {
@@ -212,9 +205,9 @@ defineExpose({ open });
             </div>
 
             <div v-if="msg.html_body" ref="bodyEl" class="rd-body" v-html="msg.html_body" />
-            <div v-else class="rd-body text">{{ textSplit.lead }}<template v-if="textHasQuote"><span v-show="showQuote">{{ '\n' + textSplit.quote }}</span></template></div>
+            <div v-else class="rd-body text">{{ textSplit.lead }}</div>
 
-            <button v-if="(msg.html_body && hasQuote) || textHasQuote" type="button" class="quote-toggle" :class="{ open: showQuote }" @click="toggleQuote" :title="t('mail.quotedText')">
+            <button v-if="(msg.html_body && hasQuote) || textHasQuote" type="button" class="quote-toggle" @click="emit('expand', msg)" :title="t('mail.quotedText')">
                 <span class="quote-dots">•••</span>
             </button>
         </div>

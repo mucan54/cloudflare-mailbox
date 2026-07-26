@@ -3,7 +3,8 @@ import { computed, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '../stores/auth';
 import { useUi } from '../stores/ui';
-import { t } from '../i18n';
+import { initials, avatarColor } from '../avatar';
+import { t, localeTag } from '../i18n';
 import MessageCard from './MessageCard.vue';
 
 const props = defineProps({
@@ -93,6 +94,17 @@ async function trash() {
     });
 }
 
+// Full-message modal (the "•••" on a card opens the complete message —
+// including its quoted history — in an overlay, like Outlook).
+const modalMsg = ref(null);
+function openModal(m) { modalMsg.value = m; }
+function closeModal() { modalMsg.value = null; }
+function whoOf(m) { return m?.mine ? t('mail.you') : (m?.from_name || m?.from_email || ''); }
+function avatarNameOf(m) { return m?.from_name || m?.from_email || '?'; }
+function fmt(iso) {
+    return iso ? new Date(iso).toLocaleString(localeTag(), { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+}
+
 defineExpose({ reply, toggleStar, trash, markUnread });
 </script>
 
@@ -129,6 +141,7 @@ defineExpose({ reply, toggleStar, trash, markUnread });
                     :acc="account"
                     :expanded="true"
                     :collapsible="messages.length > 1"
+                    @expand="openModal"
                 />
             </div>
 
@@ -138,5 +151,35 @@ defineExpose({ reply, toggleStar, trash, markUnread });
                 <button class="chip" @click="reply('forward')">➦ {{ t('mail.forward') }}</button>
             </div>
         </div>
+
+        <!-- Full-message modal (opened from a card's "•••") -->
+        <transition name="sheet">
+            <div v-if="modalMsg" class="cv-modal-scrim" @click="closeModal">
+                <div class="cv-modal" @click.stop>
+                    <header class="cv-modal-bar">
+                        <button class="ghost-ic" :title="t('common.close')" @click="closeModal">
+                            <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                        </button>
+                        <h1 class="rd-title">{{ subject || t('mail.noSubject') }}</h1>
+                    </header>
+                    <div class="cv-modal-scroll">
+                        <div class="rd-sender">
+                            <span class="ava ava-lg" :style="{ background: avatarColor(modalMsg.from_email || '') }">{{ initials(avatarNameOf(modalMsg)) }}</span>
+                            <div class="rd-sender-meta">
+                                <div class="rd-name">{{ whoOf(modalMsg) }}</div>
+                                <div class="rd-email">{{ modalMsg.from_email }}</div>
+                            </div>
+                            <div class="rd-when">{{ fmt(modalMsg.received_at) }}</div>
+                        </div>
+                        <div v-if="modalMsg.to_email" class="rd-to">
+                            <span class="rd-to-lbl">{{ t('mail.toShort') }}</span>
+                            <span class="rd-to-val">{{ modalMsg.to_email }}</span>
+                        </div>
+                        <div v-if="modalMsg.html_body" class="rd-body" v-html="modalMsg.html_body" />
+                        <pre v-else class="rd-body text">{{ modalMsg.text_body }}</pre>
+                    </div>
+                </div>
+            </div>
+        </transition>
     </div>
 </template>
