@@ -269,7 +269,9 @@ onBeforeUnmount(() => {
             <main class="main">
                 <router-view v-slot="{ Component }">
                     <transition :name="routeTransition">
-                        <component :is="Component" :key="route.fullPath" />
+                        <keep-alive :include="['Mailbox']">
+                            <component :is="Component" :key="route.fullPath" />
+                        </keep-alive>
                     </transition>
                 </router-view>
             </main>

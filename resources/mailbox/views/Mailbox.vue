@@ -2,10 +2,16 @@
 // Module-scoped so the last-loaded list for each folder survives navigating to
 // a message and back (keyed by account + folder).
 const listCache = new Map();
+
+// Named so <keep-alive :include="['Mailbox']"> keeps this view alive: returning
+// from a message re-attaches the already-rendered list (scroll intact, no
+// re-mount) instead of rebuilding it — which is what caused the back-to-inbox
+// blink.
+export default { name: 'Mailbox' };
 </script>
 
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, inject, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '../stores/auth';
 import { useUi } from '../stores/ui';
@@ -71,16 +77,11 @@ const visible = computed(() => (onlyUnread.value && !isSent.value ? emails.value
 const bySentDesc = (a, b) => new Date(b.received_at || 0) - new Date(a.received_at || 0);
 
 // ----- conversation threading (inbox/starred/trash, not sent or search) -----
-function stripRe(s) {
-    let out = (s || '').trim();
-    let prev;
-    do { prev = out; out = out.replace(/^\s*(re|fwd?|ilt|yan|ynt|aw|sv|vs|antw|wg)\s*:\s*/i, ''); } while (out !== prev);
-    return out.toLowerCase().trim();
-}
+// Group by the server-computed thread id (RFC 5322 Message-ID/References
+// chain), NOT by subject — so a genuinely new mail is its own row even if it
+// shares a subject or sender with an existing conversation.
 function threadKeyOf(e) {
-    const norm = stripRe(e.subject);
-    // No real subject → don't group (unique per message).
-    return norm ? `${e._account}|${norm}` : `${e._account}|__${e.id}`;
+    return `${e._account}|${e.thread_id || ('id:' + e.id)}`;
 }
 const threaded = computed(() => !isSent.value && !ui.search);
 
@@ -426,9 +427,21 @@ watch(() => [props.folder, auth.active], () => {
     load();
 }, { immediate: true });
 
+// keydown is bound only while this view is active (kept-alive but hidden
+// instances must not steal keystrokes from the message reader). onActivated
+// also fires right after the first onMounted.
+onActivated(() => {
+    window.addEventListener('keydown', onKey);
+    // Returning to the list: refresh in the background so it's up to date
+    // without a visible reload (poll only prepends genuinely new items).
+    poll();
+});
+onDeactivated(() => {
+    window.removeEventListener('keydown', onKey);
+});
+
 onMounted(() => {
     window.addEventListener('mailbox:new-mail', poll);
-    window.addEventListener('keydown', onKey);
     pollTimer = setInterval(poll, 45000);
     const el = rootEl.value;
     if (el) {
@@ -443,6 +456,7 @@ onBeforeUnmount(() => {
     window.removeEventListener('keydown', onKey);
     clearTimeout(searchTimer);
     clearInterval(pollTimer);
+    // In case we unmount while still active.
     const el = rootEl.value;
     if (el) {
         el.removeEventListener('touchstart', ptrStart);

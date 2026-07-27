@@ -1,7 +1,30 @@
 // Mailbox PWA service worker (root scope). Handles install/activate, a tiny
 // app-shell cache, and Web Push notifications.
-const CACHE = 'mailbox-v9';
+const CACHE = 'mailbox-v10';
 const SHELL = '/';
+
+// On resume from the background, iOS may reload the PWA while the network is
+// still coming back. A single fetch() fails instantly and would leave a white
+// screen; retrying over a few seconds lets the just-woken network recover.
+async function fetchWithRetry(req, tries = 4, delayMs = 700) {
+    let lastErr;
+    for (let i = 0; i < tries; i++) {
+        try {
+            const res = await fetch(req);
+            // Success or a non-retryable (opaque / 4xx) response — return it.
+            // Retry only on transient 5xx.
+            if (res && (res.ok || res.type === 'opaque' || (res.status >= 400 && res.status < 500))) {
+                return res;
+            }
+            lastErr = res;
+        } catch (e) {
+            lastErr = e;
+        }
+        if (i < tries - 1) await new Promise((r) => setTimeout(r, delayMs));
+    }
+    if (lastErr instanceof Response) return lastErr;
+    throw lastErr || new Error('fetch failed');
+}
 
 // Precache every hashed asset of the current build (from the Vite manifest) so
 // a resumed PWA always has a COMPLETE, consistent cache — shell + its assets —
@@ -61,8 +84,10 @@ self.addEventListener('fetch', (event) => {
     if (req.mode === 'navigate') {
         event.respondWith((async () => {
             const cached = await caches.match(SHELL);
-            const network = fetch(req)
-                .then(async (res) => {
+            // Refresh the shell + assets in the background so next boot is fresh.
+            const refresh = (async () => {
+                try {
+                    const res = await fetchWithRetry(req);
                     if (res && res.ok && res.type === 'basic') {
                         // Cache the new assets first, then the shell — so the
                         // stored shell always has matching assets (never a shell
@@ -71,21 +96,32 @@ self.addEventListener('fetch', (event) => {
                         if (await precacheBuild(cache)) cache.put(SHELL, res.clone()).catch(() => {});
                     }
                     return res;
-                })
-                .catch(() => null);
-            return cached || (await network) || Response.error();
+                } catch (_) {
+                    return null;
+                }
+            })();
+            // Cached shell boots instantly; only wait on the network (with
+            // retries) when there's nothing cached — so a just-resumed PWA whose
+            // cache was evicted retries instead of flashing a white screen.
+            if (cached) {
+                event.waitUntil(refresh);
+                return cached;
+            }
+            return (await refresh) || Response.error();
         })());
         return;
     }
 
-    // Assets (hashed JS/CSS/images): cache-first, then network. CRITICAL: on a
-    // failed asset we return a network error, NEVER the HTML shell — returning
-    // HTML for a <script>/<link> is exactly what caused the white screen.
+    // Assets (hashed JS/CSS/images): cache-first, then network (with retries).
+    // CRITICAL: on a failed asset we return a network error, NEVER the HTML
+    // shell — returning HTML for a <script>/<link> is exactly what caused the
+    // white screen. The retries cover the flaky just-resumed network so an
+    // evicted asset still loads instead of leaving the app blank.
     event.respondWith((async () => {
         const cached = await caches.match(req);
         if (cached) return cached;
         try {
-            const res = await fetch(req);
+            const res = await fetchWithRetry(req);
             if (res && res.ok && res.type === 'basic') {
                 const clone = res.clone();
                 caches.open(CACHE).then((c) => c.put(req, clone)).catch(() => {});

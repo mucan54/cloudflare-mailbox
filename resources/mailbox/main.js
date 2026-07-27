@@ -25,3 +25,29 @@ if ('serviceWorker' in navigator) {
 }
 
 createApp(App).use(createPinia()).use(router).mount('#mailbox-app');
+
+// Resume watchdog. iOS sometimes brings the PWA back to the foreground showing
+// a blank frame after jettisoning its web view — the Vue tree is gone but the
+// JS context is alive enough to run this. If we come back visible with an empty
+// root, reload once (guarded by a session flag so it can never loop) to rebuild
+// the app instead of sitting on a white screen until a full relaunch.
+function mailboxRootEmpty() {
+    const el = document.getElementById('mailbox-app');
+    return !el || el.childElementCount === 0;
+}
+// A healthy mount clears the guard so the next genuine blank can recover.
+if (!mailboxRootEmpty()) sessionStorage.removeItem('mb_reloaded');
+
+function recoverIfBlank() {
+    if (document.visibilityState !== 'visible') return;
+    if (mailboxRootEmpty()) {
+        if (!sessionStorage.getItem('mb_reloaded')) {
+            sessionStorage.setItem('mb_reloaded', '1');
+            window.location.reload();
+        }
+    } else {
+        sessionStorage.removeItem('mb_reloaded');
+    }
+}
+document.addEventListener('visibilitychange', recoverIfBlank);
+window.addEventListener('pageshow', recoverIfBlank);

@@ -120,35 +120,29 @@ class InboxController extends Controller
     /**
      * All messages in the same conversation as $email — received + sent,
      * merged and ordered oldest→newest — so the client can render an
-     * Outlook-style stacked thread. Grouping is by normalized subject
-     * (Re:/Fwd:/İlt: prefixes stripped), which matches how mail clients thread
-     * by default and works even when messages lack References headers.
+     * Outlook-style stacked thread.
+     *
+     * Threading is by RFC 5322 Message-ID / In-Reply-To / References (the JWZ
+     * approach every mail client uses), NOT by subject: a genuinely new mail
+     * (no References / In-Reply-To) is its own conversation even if it reuses a
+     * subject or comes from the same person. A reply is caught because it
+     * carries the original's Message-ID in its In-Reply-To / References.
      */
     public function thread(Request $request, int $email): JsonResponse
     {
         $user = $request->user();
         $anchor = $user->emails()->findOrFail($email);
-        $norm = $this->normalizeSubject($anchor->subject);
+        $root = $this->threadId($anchor);
 
-        if ($norm === '') {
-            // No meaningful subject to thread on — just this one message.
-            $anchor->loadMissing('attachments');
-            if (! $anchor->read_at) {
-                $anchor->update(['read_at' => now()]);
-            }
-
-            return response()->json([
-                'subject' => $anchor->subject,
-                'messages' => [$this->threadItem($anchor)],
-            ]);
-        }
-
-        // Narrow with a LIKE, then match on the exact normalized subject.
-        $received = $user->emails()->with('attachments')
+        // Match received messages by their computed thread root. Only the
+        // lightweight header columns are needed to decide membership.
+        $ids = $user->emails()
             ->where('folder', '!=', 'trash')
-            ->where('subject', 'like', '%'.$norm.'%')
-            ->get()
-            ->filter(fn (Email $e) => $this->normalizeSubject($e->subject) === $norm);
+            ->get(['id', 'message_id', 'in_reply_to', 'references'])
+            ->filter(fn (Email $e) => $this->threadId($e) === $root)
+            ->pluck('id');
+
+        $received = $user->emails()->with('attachments')->whereIn('id', $ids)->get();
 
         // Mark the whole conversation read as it's opened.
         $received->each(function (Email $e) {
@@ -157,10 +151,16 @@ class InboxController extends Controller
             }
         });
 
-        $sent = $user->sentEmails()->with('attachments')
-            ->where('subject', 'like', '%'.$norm.'%')
-            ->get()
-            ->filter(fn (SentEmail $s) => $this->normalizeSubject($s->subject) === $norm);
+        // Our own messages in this conversation: match by their thread root
+        // (Message-ID/References we now persist) OR, for legacy rows without a
+        // Message-ID, by the DB-id link to the parent received message.
+        $idList = $ids->all();
+        $sentIds = $user->sentEmails()
+            ->get(['id', 'message_id', 'in_reply_to', 'references', 'in_reply_to_email_id'])
+            ->filter(fn (SentEmail $s) => $this->threadId($s) === $root
+                || in_array($s->in_reply_to_email_id, $idList, true))
+            ->pluck('id');
+        $sent = $user->sentEmails()->with('attachments')->whereIn('id', $sentIds)->get();
 
         $messages = $received->map(fn (Email $e) => $this->threadItem($e))
             ->concat($sent->map(fn (SentEmail $s) => $this->threadItemSent($s, $user->display_name, $user->email)))
@@ -173,16 +173,26 @@ class InboxController extends Controller
         ]);
     }
 
-    private function normalizeSubject(?string $s): string
+    /**
+     * The conversation key for a message (received OR sent): the root
+     * Message-ID of its reply chain. References is ordered oldest→newest, so
+     * references[0] is the thread origin; otherwise the message it directly
+     * replies to; otherwise its own Message-ID. A message with none of these is
+     * a thread of one (keyed by its DB id, type-prefixed so a received id never
+     * collides with a sent id) — never merged with unrelated mail.
+     *
+     * @param  Email|SentEmail  $m
+     */
+    private function threadId($m): string
     {
-        $s = trim((string) $s);
-        do {
-            $prev = $s;
-            // Re:, Fw:, Fwd:, İlt:, Yan:, Ynt:, AW:, SV:, VS:, Antw:, WG:
-            $s = preg_replace('/^\s*(re|fwd?|ilt|yan|ynt|aw|sv|vs|antw|wg)\s*:\s*/iu', '', (string) $s);
-        } while ($s !== $prev);
+        $refs = is_array($m->references) ? $m->references : [];
+        $root = $refs[0] ?? $m->in_reply_to ?? $m->message_id ?? null;
+        $root = is_string($root) ? trim($root) : '';
+        if ($root !== '') {
+            return $root;
+        }
 
-        return mb_strtolower(trim($s));
+        return ($m instanceof SentEmail ? 'sid:' : 'id:').$m->id;
     }
 
     /** @return array<string, mixed> */
@@ -230,6 +240,7 @@ class InboxController extends Controller
             'starred' => $e->starred,
             'folder' => $e->folder,
             'received_at' => $e->received_at?->toIso8601String(),
+            'thread_id' => $this->threadId($e),
         ];
     }
 
