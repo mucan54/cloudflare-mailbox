@@ -1,0 +1,39 @@
+# OPTIONAL — native-mail (IMAP + SMTP) bridge only. Coolify-compatible.
+#
+# The main app does NOT need this. Deploy it only to enable Apple Mail /
+# Outlook / Thunderbird access.
+#
+# Coolify: add a new resource → "Docker Compose" → point at this file (Base
+# Directory = repo root). Coolify reads the ports below and the HTTP health
+# check. No domain/proxy is needed — IMAP/SMTP are raw TCP, so leave the app
+# without a public domain and rely on the port mappings.
+services:
+  mailserver:
+    build:
+      context: ./mailserver
+    restart: unless-stopped
+    ports:
+      - "587:587"   # SMTP submission (STARTTLS)
+      - "993:993"   # IMAP over TLS
+      # 8080 is the internal health port; expose it only if you want Coolify to
+      # health-check over HTTP from outside. The container HEALTHCHECK covers it.
+    environment:
+      LARAVEL_API_URL: ${LARAVEL_API_URL:-https://mailbox.mucan.dev}
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-mail.mucan.dev}
+      SMTP_ADDR: ":587"
+      IMAP_ADDR: ":993"
+      HEALTH_ADDR: ":8080"
+      # Provide real certs for production (mount them via a Coolify volume and
+      # set the paths here). If left empty, a self-signed cert is generated so
+      # the service still starts — clients will warn.
+      TLS_CERT: ${TLS_CERT:-}
+      TLS_KEY: ${TLS_KEY:-}
+      ALLOW_INSECURE_AUTH: ${ALLOW_INSECURE_AUTH:-false}
+    volumes:
+      - ${TLS_DIR:-./certs}:/certs:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

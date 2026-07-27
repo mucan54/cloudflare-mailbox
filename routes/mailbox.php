@@ -27,6 +27,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/emails', [InboxController::class, 'index']);
     Route::get('/emails/{email}/thread', [InboxController::class, 'thread']);
     Route::get('/emails/{email}', [InboxController::class, 'show']);
+    Route::get('/emails/{email}/raw', [InboxController::class, 'raw']);
     Route::patch('/emails/{email}', [InboxController::class, 'update']);
 
     Route::get('/sent', [SendController::class, 'index']);

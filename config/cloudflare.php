@@ -39,6 +39,34 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Native mail client access (optional — the Go IMAP/SMTP bridge)
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, the app serves autodiscover/autoconfig XML and can create
+    | the DNS records (autodiscover/autoconfig CNAMEs + mail CNAME + SRV) on
+    | each domain so Apple Mail / Outlook auto-configure. `server_host` is where
+    | the bridge runs (mail.<domain> points here); `app_host` serves the XML
+    | (defaults to APP_URL's host).
+    |
+    */
+
+    'mail_client' => [
+        'enabled' => (bool) env('MAIL_CLIENT_ACCESS', false),
+        'auto_dns' => (bool) env('MAIL_CLIENT_AUTO_DNS', false),
+        'server_host' => env('MAIL_CLIENT_SERVER_HOST'), // e.g. mail.example.com
+        'app_host' => env('MAIL_CLIENT_APP_HOST', parse_url((string) env('APP_URL'), PHP_URL_HOST) ?: 'localhost'),
+        'imap_port' => (int) env('MAIL_CLIENT_IMAP_PORT', 993),
+        'smtp_port' => (int) env('MAIL_CLIENT_SMTP_PORT', 587),
+
+        // CalDAV/CardDAV are served by Laravel itself over normal HTTPS (no
+        // extra ports), so they only need the app host. When enabled, /dav is
+        // mounted, RFC 6764 auto-discovery + SRV records are advertised and
+        // the per-mailbox .mobileconfig bundles Mail + Calendar + Contacts.
+        'dav' => (bool) env('MAIL_CLIENT_DAV', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Onboarding — API token template deep link
     |--------------------------------------------------------------------------
     |
