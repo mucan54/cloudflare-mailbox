@@ -45,6 +45,9 @@ class EmailSender
             'bcc' => $this->arr($message['bcc'] ?? []),
             'reply_to' => $message['reply_to'] ?? null,
             'subject' => $message['subject'] ?? null,
+            'message_id' => $input['message_id'] ?? null,
+            'in_reply_to' => $input['in_reply_to'] ?? null,
+            'references' => ! empty($input['references']) ? (array) $input['references'] : null,
             'html_body' => $message['html'] ?? null,
             'text_body' => $message['text'] ?? null,
             'status' => $result->status,
@@ -117,6 +120,20 @@ class EmailSender
             throw new RuntimeException('A "from" address is required.');
         }
 
+        // Fold the RFC 5322 threading fields into the outgoing headers so the
+        // recipient's client threads the message (and its replies point back at
+        // our Message-ID).
+        $headers = $input['headers'] ?? [];
+        if (! empty($input['message_id'])) {
+            $headers['Message-ID'] = $input['message_id'];
+        }
+        if (! empty($input['in_reply_to'])) {
+            $headers['In-Reply-To'] = $input['in_reply_to'];
+        }
+        if (! empty($input['references'])) {
+            $headers['References'] = implode(' ', (array) $input['references']);
+        }
+
         return array_filter([
             'from' => $input['from'],
             'from_name' => $input['from_name'] ?? null,
@@ -127,7 +144,7 @@ class EmailSender
             'subject' => $input['subject'] ?? null,
             'html' => $input['html'] ?? null,
             'text' => $input['text'] ?? null,
-            'headers' => $input['headers'] ?? null,
+            'headers' => $headers,
             'attachments' => $input['attachments'] ?? null,
         ], fn ($v) => $v !== null && $v !== []);
     }

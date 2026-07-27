@@ -8,6 +8,7 @@ use Illuminate\Mail\Mailables\Address;
 use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
+use Illuminate\Mail\Mailables\Headers;
 use Illuminate\Queue\SerializesModels;
 
 class OutboundMail extends Mailable
@@ -30,6 +31,41 @@ class OutboundMail extends Mailable
             bcc: $this->addresses($m['bcc'] ?? []),
             replyTo: isset($m['reply_to']) ? [new Address($m['reply_to'])] : [],
             subject: $m['subject'] ?? '',
+        );
+    }
+
+    public function headers(): Headers
+    {
+        $h = $this->message['headers'] ?? [];
+        $text = [];
+        foreach ($h as $name => $value) {
+            // messageId + references have dedicated slots; everything else
+            // (In-Reply-To, …) rides along as a custom text header.
+            if (strcasecmp($name, 'Message-ID') === 0 || strcasecmp($name, 'References') === 0) {
+                continue;
+            }
+            $text[$name] = $value;
+        }
+
+        $messageId = null;
+        foreach ($h as $name => $value) {
+            if (strcasecmp($name, 'Message-ID') === 0) {
+                // Headers::messageId wants the id without the angle brackets.
+                $messageId = trim((string) $value, '<>');
+            }
+        }
+
+        $references = [];
+        foreach ($h as $name => $value) {
+            if (strcasecmp($name, 'References') === 0) {
+                $references = preg_split('/\s+/', trim((string) $value)) ?: [];
+            }
+        }
+
+        return new Headers(
+            messageId: $messageId,
+            references: $references,
+            text: $text,
         );
     }
 

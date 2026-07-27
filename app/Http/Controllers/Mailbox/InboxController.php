@@ -108,12 +108,16 @@ class InboxController extends Controller
             }
         });
 
-        // Our own replies live in sent_emails, linked to the parent received
-        // message by DB id (we don't persist their Message-ID). Pull in every
-        // sent message that replies to a received message in this thread.
-        $sent = $user->sentEmails()->with('attachments')
-            ->whereIn('in_reply_to_email_id', $ids)
-            ->get();
+        // Our own messages in this conversation: match by their thread root
+        // (Message-ID/References we now persist) OR, for legacy rows without a
+        // Message-ID, by the DB-id link to the parent received message.
+        $idList = $ids->all();
+        $sentIds = $user->sentEmails()
+            ->get(['id', 'message_id', 'in_reply_to', 'references', 'in_reply_to_email_id'])
+            ->filter(fn (SentEmail $s) => $this->threadId($s) === $root
+                || in_array($s->in_reply_to_email_id, $idList, true))
+            ->pluck('id');
+        $sent = $user->sentEmails()->with('attachments')->whereIn('id', $sentIds)->get();
 
         $messages = $received->map(fn (Email $e) => $this->threadItem($e))
             ->concat($sent->map(fn (SentEmail $s) => $this->threadItemSent($s, $user->display_name, $user->email)))
@@ -127,19 +131,25 @@ class InboxController extends Controller
     }
 
     /**
-     * The conversation key for a message: the root Message-ID of its reply
-     * chain. References is ordered oldest→newest, so references[0] is the
-     * thread origin; otherwise the message it directly replies to; otherwise
-     * its own Message-ID. A message with none of these is a thread of one
-     * (keyed by its DB id) — never merged with unrelated mail.
+     * The conversation key for a message (received OR sent): the root
+     * Message-ID of its reply chain. References is ordered oldest→newest, so
+     * references[0] is the thread origin; otherwise the message it directly
+     * replies to; otherwise its own Message-ID. A message with none of these is
+     * a thread of one (keyed by its DB id, type-prefixed so a received id never
+     * collides with a sent id) — never merged with unrelated mail.
+     *
+     * @param  Email|SentEmail  $m
      */
-    private function threadId(Email $e): string
+    private function threadId($m): string
     {
-        $refs = is_array($e->references) ? $e->references : [];
-        $root = $refs[0] ?? $e->in_reply_to ?? $e->message_id ?? null;
+        $refs = is_array($m->references) ? $m->references : [];
+        $root = $refs[0] ?? $m->in_reply_to ?? $m->message_id ?? null;
         $root = is_string($root) ? trim($root) : '';
+        if ($root !== '') {
+            return $root;
+        }
 
-        return $root !== '' ? $root : ('id:'.$e->id);
+        return ($m instanceof SentEmail ? 'sid:' : 'id:').$m->id;
     }
 
     /** @return array<string, mixed> */

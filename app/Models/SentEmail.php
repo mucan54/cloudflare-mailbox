@@ -11,6 +11,7 @@ class SentEmail extends Model
     protected $fillable = [
         'cloudflare_account_id', 'domain_id', 'mailbox_id', 'driver',
         'from_email', 'to', 'cc', 'bcc', 'reply_to', 'subject',
+        'message_id', 'in_reply_to', 'references',
         'html_body', 'text_body', 'status', 'cf_response', 'error',
         'in_reply_to_email_id', 'sent_at',
     ];
@@ -21,6 +22,7 @@ class SentEmail extends Model
             'to' => 'array',
             'cc' => 'array',
             'bcc' => 'array',
+            'references' => 'array',
             'cf_response' => 'array',
             'sent_at' => 'datetime',
         ];

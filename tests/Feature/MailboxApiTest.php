@@ -254,6 +254,37 @@ class MailboxApiTest extends TestCase
         $this->assertNotNull($original->fresh()->read_at);
     }
 
+    public function test_sent_message_id_threads_with_a_later_received_reply(): void
+    {
+        Http::fake(['*/email/sending/send' => Http::response([
+            'success' => true, 'errors' => [], 'result' => ['delivered' => ['peer@x.com'], 'queued' => [], 'permanent_bounces' => []],
+        ])]);
+
+        $mailbox = $this->mailbox();
+        Sanctum::actingAs($mailbox);
+
+        // We start a conversation. A Message-ID is generated and stored.
+        $this->postJson('/api/mailbox/send', [
+            'to' => ['peer@x.com'], 'subject' => 'Proposal', 'text' => 'Original',
+        ])->assertStatus(201);
+        $sent = $mailbox->sentEmails()->firstOrFail();
+        $this->assertNotEmpty($sent->message_id);
+
+        // The recipient replies, referencing our Message-ID.
+        $reply = $mailbox->emails()->create([
+            'cloudflare_account_id' => $mailbox->cloudflare_account_id, 'ingest_key' => 'r1',
+            'subject' => 'Re: Proposal', 'text_body' => 'Sounds good',
+            'message_id' => '<reply@x.com>', 'in_reply_to' => $sent->message_id,
+            'references' => [$sent->message_id], 'from_email' => 'peer@x.com', 'received_at' => now(),
+        ]);
+
+        // Opening the received reply's thread pulls in our sent original.
+        $res = $this->getJson("/api/mailbox/emails/{$reply->id}/thread")->assertOk();
+        $res->assertJsonCount(2, 'messages');
+        $this->assertStringContainsString('Original', $res->getContent());
+        $this->assertStringContainsString('Sounds good', $res->getContent());
+    }
+
     public function test_index_thread_id_separates_unrelated_same_subject_mail(): void
     {
         $mailbox = $this->mailbox();

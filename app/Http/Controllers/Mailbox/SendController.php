@@ -86,6 +86,26 @@ class SendController extends Controller
             'attachments.*.size' => ['nullable', 'integer'],
         ]);
 
+        // Give every outgoing message a stable Message-ID (and, for replies,
+        // In-Reply-To / References built from the parent) so conversations we
+        // start thread correctly when the other side replies — and so our own
+        // replies slot into the right conversation.
+        $domain = str_contains($mailbox->email, '@') ? substr(strrchr($mailbox->email, '@'), 1) : 'localhost';
+        $messageId = '<'.Str::uuid()->toString().'@'.$domain.'>';
+
+        $inReplyTo = null;
+        $references = [];
+        if (! empty($data['in_reply_to_email_id'])) {
+            $parent = $mailbox->emails()->find($data['in_reply_to_email_id']);
+            if ($parent && $parent->message_id) {
+                $inReplyTo = $parent->message_id;
+                $references = array_values(array_filter(array_merge(
+                    is_array($parent->references) ? $parent->references : [],
+                    [$parent->message_id],
+                )));
+            }
+        }
+
         // The mailbox may only send as itself.
         $sent = $sender->send($mailbox->account, [
             'from' => $mailbox->email,
@@ -96,6 +116,9 @@ class SendController extends Controller
             'subject' => $data['subject'],
             'html' => $data['html'] ?? null,
             'text' => $data['text'] ?? null,
+            'message_id' => $messageId,
+            'in_reply_to' => $inReplyTo,
+            'references' => $references,
             'in_reply_to_email_id' => $data['in_reply_to_email_id'] ?? null,
             'attachments' => $data['attachments'] ?? [],
         ], $mailbox);
