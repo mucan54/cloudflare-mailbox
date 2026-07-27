@@ -18,6 +18,11 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design.
 - **Sending**: Cloudflare REST API (default) or SMTP, switchable via config.
 - **Receiving**: a Cloudflare **Email Worker** (`cf/`) parses inbound mail and posts
   it to a signed webhook; Laravel stores it and pushes a notification.
+- **Native mail apps** (optional, off by default): an IMAP/SMTP bridge
+  ([`mailserver/`](mailserver/) + [`docker-compose.mailserver.yml`](docker-compose.mailserver.yml))
+  plus CalDAV/CardDAV served at `/dav` and mail-client autodiscovery, so Apple
+  Mail / Outlook / Thunderbird and native calendar & contacts can connect. See
+  [Native mail apps](#native-mail-apps-optional) below.
 
 ## Requirements
 
@@ -59,6 +64,57 @@ php artisan cf:deploy-worker {tenant}   # render wrangler.toml + deploy + set se
 php artisan cf:worker:status            # up-to-date / drifted / never deployed
 php artisan cf:worker:sync              # redeploy drifted tenants (idempotent)
 ```
+
+## Native mail apps (optional)
+
+Everything above is a self-contained web app. This section is **entirely optional** —
+the plain Laravel deploy runs fine without any of it, and none of it is enabled by
+default. Turn it on only if you also want to reach your mailboxes from native clients.
+
+### Calendar & contacts (CalDAV / CardDAV) — no extra service
+
+CalDAV and CardDAV are HTTP-based, so Laravel serves them itself at `/dav` (via
+`sabre/dav`) — no extra ports, no Docker, behind the same Coolify/Cloudflare HTTPS.
+Enable with:
+
+```env
+MAIL_CLIENT_DAV=true
+```
+
+Each mailbox then syncs its calendar (the `events` table) and contacts to **iOS/macOS**
+(native Calendar/Contacts) and **Android** (via the DAVx5 app). RFC 6764 discovery
+(`.well-known/caldav|carddav` + `_caldavs`/`_carddavs` SRV records) lets clients set up
+from just email + password, and there's a one-tap Apple configuration profile at
+`/mail/profile/<email>.mobileconfig` that bundles **Mail + Calendar + Contacts**.
+
+### IMAP / SMTP bridge — `docker-compose.mailserver.yml`
+
+Reading and sending over **IMAP/SMTP** needs a small standalone service: IMAP/SMTP are
+raw-TCP protocols, so (unlike CalDAV/CardDAV) they can't run inside the HTTP app. The
+bridge lives in [`mailserver/`](mailserver/) — a stateless Go service that stores
+nothing and proxies every IMAP/SMTP action to the Laravel mailbox API — and ships as
+its **own** compose file so it never affects a plain deploy:
+
+```bash
+docker compose -f docker-compose.mailserver.yml up -d
+```
+
+Then enable the feature and point the app at the bridge's host:
+
+```env
+MAIL_CLIENT_ACCESS=true
+MAIL_CLIENT_SERVER_HOST=mail.example.com   # where the bridge is reachable
+MAIL_CLIENT_AUTO_DNS=true                  # auto-create the DNS records per domain
+```
+
+With it on, the app serves autodiscover/autoconfig XML so Apple Mail / Outlook /
+Thunderbird configure themselves from just the address. The DNS records
+(autodiscover/autoconfig/mail CNAMEs, `_imaps`/`_submission` + CalDAV/CardDAV SRV) are
+provisioned per domain automatically (`MAIL_CLIENT_AUTO_DNS=true`) or on demand from the
+admin panel's **Domains → "Mail istemci DNS"** action.
+
+See **[`mailserver/README.md`](mailserver/README.md)** for the full walkthrough — env
+vars, TLS, Coolify deployment, and scope/limitations.
 
 ## Production (Coolify)
 
@@ -142,7 +198,7 @@ the Home Screen icon, and grants permission via the in-app "Bildirimleri aç" pr
 ## Testing
 
 ```bash
-php artisan test        # 54 feature tests
+php artisan test        # full feature suite (108 tests)
 vendor/bin/pint         # code style
 ```
 
