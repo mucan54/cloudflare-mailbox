@@ -254,7 +254,7 @@ svg { width: 100%; height: 100%; display: block; }
 .msg:first-child { border-top: none; }
 .msg-head { display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left; background: none; border: none; padding: 0; cursor: default; }
 .msg.collapsible .msg-head { cursor: pointer; }
-.msg-head .ava { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 600; font-size: 14px; }
+.msg-head .ava { flex: none; width: 40px; height: 40px; min-width: 40px; max-width: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 600; font-size: 14px; }
 .msg-hmeta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .msg-line1 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .msg-who { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

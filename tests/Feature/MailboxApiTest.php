@@ -225,27 +225,48 @@ class MailboxApiTest extends TestCase
             ->assertJsonMissing(['subject' => 'InboxMail']);
     }
 
-    public function test_thread_merges_received_and_sent_by_normalized_subject(): void
+    public function test_thread_groups_by_reply_headers_and_includes_sent(): void
     {
         $mailbox = $this->mailbox();
         $acc = $mailbox->cloudflare_account_id;
 
-        // A received message and a reply we sent, plus an unrelated message.
-        $received = $mailbox->emails()->create(['cloudflare_account_id' => $acc, 'ingest_key' => 'k1', 'subject' => 'Test', 'text_body' => 'Test2', 'from_email' => 'peer@x.com', 'received_at' => now()->subMinutes(2)]);
-        $mailbox->sentEmails()->create(['cloudflare_account_id' => $acc, 'from_email' => 'me@a.com', 'to' => ['peer@x.com'], 'subject' => 'Re: Test', 'text_body' => 'Test3', 'sent_at' => now()->subMinute()]);
-        $mailbox->emails()->create(['cloudflare_account_id' => $acc, 'ingest_key' => 'k2', 'subject' => 'Unrelated', 'received_at' => now()]);
+        // Original received message + a later received reply that references it
+        // (In-Reply-To/References carry the original's Message-ID).
+        $original = $mailbox->emails()->create(['cloudflare_account_id' => $acc, 'ingest_key' => 'k1', 'subject' => 'Oldu', 'text_body' => 'Test1', 'message_id' => '<orig@x.com>', 'from_email' => 'peer@x.com', 'received_at' => now()->subMinutes(3)]);
+        $reply = $mailbox->emails()->create(['cloudflare_account_id' => $acc, 'ingest_key' => 'k2', 'subject' => 'Re: Oldu', 'text_body' => 'Test2', 'message_id' => '<r2@x.com>', 'in_reply_to' => '<orig@x.com>', 'references' => ['<orig@x.com>'], 'from_email' => 'peer@x.com', 'received_at' => now()->subMinutes(2)]);
+        // A reply we sent, linked to the original by DB id.
+        $mailbox->sentEmails()->create(['cloudflare_account_id' => $acc, 'from_email' => 'me@a.com', 'to' => ['peer@x.com'], 'subject' => 'Re: Oldu', 'text_body' => 'Test3', 'in_reply_to_email_id' => $original->id, 'sent_at' => now()->subMinute()]);
+
+        // Unrelated new mail from the SAME sender with the SAME subject — must
+        // NOT be threaded (no References / In-Reply-To linkage).
+        $mailbox->emails()->create(['cloudflare_account_id' => $acc, 'ingest_key' => 'k3', 'subject' => 'Oldu', 'text_body' => 'Brand new', 'message_id' => '<new@x.com>', 'from_email' => 'peer@x.com', 'received_at' => now()]);
 
         Sanctum::actingAs($mailbox);
 
-        $res = $this->getJson("/api/mailbox/emails/{$received->id}/thread")->assertOk();
-        $res->assertJsonCount(2, 'messages');
-        $res->assertJsonPath('messages.0.text_body', 'Test2');   // oldest first
-        $res->assertJsonPath('messages.0.type', 'received');
-        $res->assertJsonPath('messages.1.text_body', 'Test3');
-        $res->assertJsonPath('messages.1.type', 'sent');
+        $res = $this->getJson("/api/mailbox/emails/{$original->id}/thread")->assertOk();
+        $res->assertJsonCount(3, 'messages'); // original + received reply + our sent reply
+        $res->assertJsonPath('messages.0.text_body', 'Test1');
+        $res->assertJsonPath('messages.1.text_body', 'Test2');
+        $res->assertJsonPath('messages.2.text_body', 'Test3');
+        $res->assertJsonPath('messages.2.type', 'sent');
+        $this->assertStringNotContainsString('Brand new', $res->getContent());
 
-        // Opening the thread marks the received message read.
-        $this->assertNotNull($received->fresh()->read_at);
+        $this->assertNotNull($original->fresh()->read_at);
+    }
+
+    public function test_index_thread_id_separates_unrelated_same_subject_mail(): void
+    {
+        $mailbox = $this->mailbox();
+        $acc = $mailbox->cloudflare_account_id;
+        $a = $mailbox->emails()->create(['cloudflare_account_id' => $acc, 'ingest_key' => 'k1', 'subject' => 'Oldu', 'message_id' => '<a@x.com>', 'from_email' => 'peer@x.com', 'received_at' => now()->subMinute()]);
+        $b = $mailbox->emails()->create(['cloudflare_account_id' => $acc, 'ingest_key' => 'k2', 'subject' => 'Oldu', 'message_id' => '<b@x.com>', 'from_email' => 'peer@x.com', 'received_at' => now()]);
+
+        Sanctum::actingAs($mailbox);
+        $data = $this->getJson('/api/mailbox/emails')->assertOk()->json('data');
+        $byId = collect($data)->keyBy('id');
+
+        // Same subject + sender, but no reply headers → different thread ids.
+        $this->assertNotEquals($byId[$a->id]['thread_id'], $byId[$b->id]['thread_id']);
     }
 
     public function test_move_email_to_trash_and_star(): void

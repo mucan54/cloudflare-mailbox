@@ -77,16 +77,11 @@ const visible = computed(() => (onlyUnread.value && !isSent.value ? emails.value
 const bySentDesc = (a, b) => new Date(b.received_at || 0) - new Date(a.received_at || 0);
 
 // ----- conversation threading (inbox/starred/trash, not sent or search) -----
-function stripRe(s) {
-    let out = (s || '').trim();
-    let prev;
-    do { prev = out; out = out.replace(/^\s*(re|fwd?|ilt|yan|ynt|aw|sv|vs|antw|wg)\s*:\s*/i, ''); } while (out !== prev);
-    return out.toLowerCase().trim();
-}
+// Group by the server-computed thread id (RFC 5322 Message-ID/References
+// chain), NOT by subject — so a genuinely new mail is its own row even if it
+// shares a subject or sender with an existing conversation.
 function threadKeyOf(e) {
-    const norm = stripRe(e.subject);
-    // No real subject → don't group (unique per message).
-    return norm ? `${e._account}|${norm}` : `${e._account}|__${e.id}`;
+    return `${e._account}|${e.thread_id || ('id:' + e.id)}`;
 }
 const threaded = computed(() => !isSent.value && !ui.search);
 
