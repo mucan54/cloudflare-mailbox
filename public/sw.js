@@ -1,18 +1,35 @@
-// Mailbox PWA service worker (root scope). Handles install/activate, a tiny
+// Mailbox PWA service worker (root scope). Handles install/activate, an
 // app-shell cache, and Web Push notifications.
-const CACHE = 'mailbox-v10';
+const CACHE = 'mailbox-v11';
 const SHELL = '/';
 
-// On resume from the background, iOS may reload the PWA while the network is
-// still coming back. A single fetch() fails instantly and would leave a white
-// screen; retrying over a few seconds lets the just-woken network recover.
+// Shown ONLY when a navigation has neither network nor a cached shell: a
+// spinner that reloads itself, so a cold/evicted PWA on a momentarily dead
+// network shows "reconnecting" and self-heals instead of a permanent white
+// screen requiring a force-quit.
+const RECONNECT_HTML = '<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mailbox</title><style>html,body{height:100%;margin:0}body{display:flex;align-items:center;justify-content:center;background:#faf9f8;color:#605e5c;font-family:-apple-system,system-ui,sans-serif}.s{width:30px;height:30px;border:3px solid currentColor;border-top-color:transparent;border-radius:50%;animation:r 1s linear infinite}@keyframes r{to{transform:rotate(360deg)}}@media(prefers-color-scheme:dark){body{background:#1b1a19;color:#a19f9d}}</style></head><body><div class="s" role="status" aria-label="Yukleniyor"></div><script>setTimeout(function(){location.reload()},2000)</script></body></html>';
+
+function reconnectResponse() {
+    return new Response(RECONNECT_HTML, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+    });
+}
+
+function timeout(ms) {
+    return new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
+}
+
+// Retry a request over a few seconds — the just-woken network on resume fails
+// the first fetch instantly, so a single try would white-screen; retries let it
+// recover. Used for assets (hashed → immutable, so re-fetching is always safe).
 async function fetchWithRetry(req, tries = 4, delayMs = 700) {
     let lastErr;
     for (let i = 0; i < tries; i++) {
         try {
             const res = await fetch(req);
             // Success or a non-retryable (opaque / 4xx) response — return it.
-            // Retry only on transient 5xx.
+            // Retry only on transient 5xx or a thrown network error.
             if (res && (res.ok || res.type === 'opaque' || (res.status >= 400 && res.status < 500))) {
                 return res;
             }
@@ -27,9 +44,7 @@ async function fetchWithRetry(req, tries = 4, delayMs = 700) {
 }
 
 // Precache every hashed asset of the current build (from the Vite manifest) so
-// a resumed PWA always has a COMPLETE, consistent cache — shell + its assets —
-// and can boot instantly offline. This is what stops the white screen when iOS
-// reloads the app on resume from the background.
+// a fresh install can boot offline with a COMPLETE, consistent cache.
 async function precacheBuild(cache) {
     try {
         const res = await fetch('/build/manifest.json', { cache: 'no-cache' });
@@ -74,49 +89,50 @@ self.addEventListener('fetch', (event) => {
 
     const url = new URL(req.url);
     if (url.origin !== self.location.origin) return; // leave cross-origin alone
-    if (url.pathname.startsWith('/api/')) return; // never cache the API
+    if (url.pathname.startsWith('/api/')) return;     // never cache the API
 
-    // Page navigations: serve the cached shell IMMEDIATELY, revalidate in the
-    // background. iOS reloads the PWA when it's resumed from the background, and
-    // a network-first await here would hang on the flaky just-resumed network,
-    // leaving a white screen until it resolved. Cache-first boots instantly; the
-    // fresh index and its assets are refreshed in the background for next time.
+    // Page navigations: NETWORK-FIRST with a short timeout, then the cached
+    // shell, then a self-reloading fallback.
+    //
+    // Why network-first (not cache-first): the shell references content-hashed
+    // assets. After a redeploy the *cached* shell can point at asset hashes that
+    // no longer exist on the server → 404 → white screen. The *fresh* shell
+    // always matches the live build, so its assets resolve. The 3s timeout
+    // bounds the wait so a flaky just-resumed network can't hang on white — it
+    // falls back to the cached shell (whose cached assets are consistent with
+    // it), and if even that is gone, to a spinner that retries. So a navigation
+    // never resolves to a permanent blank.
     if (req.mode === 'navigate') {
         event.respondWith((async () => {
-            const cached = await caches.match(SHELL);
-            // Refresh the shell + assets in the background so next boot is fresh.
-            const refresh = (async () => {
-                try {
-                    const res = await fetchWithRetry(req);
-                    if (res && res.ok && res.type === 'basic') {
-                        // Cache the new assets first, then the shell — so the
-                        // stored shell always has matching assets (never a shell
-                        // that points at assets we failed to cache).
-                        const cache = await caches.open(CACHE);
-                        if (await precacheBuild(cache)) cache.put(SHELL, res.clone()).catch(() => {});
-                    }
-                    return res;
-                } catch (_) {
-                    return null;
+            const net = fetch(req).then((res) => {
+                // A non-OK navigation (server restarting mid-deploy, 5xx, …)
+                // should fall back to the working cached app, not render an
+                // error page — so treat it like a network failure.
+                if (!res || !res.ok) throw new Error('bad navigation status');
+                if (res.type === 'basic') {
+                    const copy = res.clone();
+                    caches.open(CACHE).then((c) => c.put(SHELL, copy)).catch(() => {});
                 }
-            })();
-            // Cached shell boots instantly; only wait on the network (with
-            // retries) when there's nothing cached — so a just-resumed PWA whose
-            // cache was evicted retries instead of flashing a white screen.
-            if (cached) {
-                event.waitUntil(refresh);
-                return cached;
+                return res;
+            });
+            try {
+                return await Promise.race([net, timeout(3000)]);
+            } catch (_) {
+                // A slow network can still finish and refresh the cache for next
+                // time; meanwhile serve the last good shell, or the spinner.
+                event.waitUntil(net.catch(() => {}));
+                const cached = await caches.match(SHELL);
+                return cached || reconnectResponse();
             }
-            return (await refresh) || Response.error();
         })());
         return;
     }
 
     // Assets (hashed JS/CSS/images): cache-first, then network (with retries).
-    // CRITICAL: on a failed asset we return a network error, NEVER the HTML
-    // shell — returning HTML for a <script>/<link> is exactly what caused the
-    // white screen. The retries cover the flaky just-resumed network so an
-    // evicted asset still loads instead of leaving the app blank.
+    // CRITICAL: on a failed asset return a network error, NEVER the HTML shell —
+    // returning HTML for a <script>/<link> is itself a white-screen cause. The
+    // retries cover the flaky just-resumed network so an evicted asset still
+    // loads instead of leaving the app blank.
     event.respondWith((async () => {
         const cached = await caches.match(req);
         if (cached) return cached;
