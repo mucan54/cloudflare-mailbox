@@ -1,0 +1,174 @@
+# Coolify "Docker Compose" build pack — FULL stack WITH native mail-app access.
+#
+# Same production stack as docker-compose.yaml (app + worker + scheduler + MySQL
+# + Redis) PLUS the IMAP/SMTP bridge, wired to the app over the internal network.
+# Deploy THIS file instead of docker-compose.yaml when you want Apple Mail /
+# Outlook / Thunderbird (IMAP/SMTP) in addition to the web PWA. Calendar &
+# contacts (CalDAV/CardDAV) are served by the app itself — no extra service.
+#
+# Pick ONE compose file:
+#   docker-compose.yaml         → web PWA only (no native mail apps)
+#   docker-compose.native.yaml  → everything above + IMAP/SMTP + CalDAV/CardDAV
+#
+# Extra env you set in Coolify for this file:
+#   MAIL_CLIENT_SERVER_HOST  the public host clients connect to for IMAP/SMTP,
+#                            e.g. mail.example.com — a GREY-CLOUD (DNS-only) A
+#                            record pointing at this server's IP (Cloudflare's
+#                            proxy can't carry raw IMAP/SMTP).
+#   TLS_CERT / TLS_KEY       PEM paths inside the mailserver container for real
+#                            IMAP/SMTP TLS (mount them via TLS_DIR). If unset a
+#                            self-signed cert is generated so it still boots
+#                            (clients warn).
+
+x-app-env: &app-env
+  APP_NAME: "Cloudflare Mailbox"
+  APP_ENV: production
+  APP_DEBUG: "false"
+  APP_KEY: base64:${SERVICE_REALBASE64_APPKEY}
+  APP_URL: ${SERVICE_URL_APP}
+
+  LOG_CHANNEL: stderr
+  LOG_LEVEL: info
+
+  DB_CONNECTION: mysql
+  DB_HOST: mysql
+  DB_PORT: "3306"
+  DB_DATABASE: ${MYSQL_DATABASE:-mailbox}
+  DB_USERNAME: ${MYSQL_USER:-mailbox}
+  DB_PASSWORD: ${SERVICE_PASSWORD_MYSQL}
+
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+
+  QUEUE_CONNECTION: redis
+  CACHE_STORE: redis
+  SESSION_DRIVER: redis
+
+  # Attachments (Cloudflare R2 / S3 / MinIO)
+  CLOUDFLARE_ATTACHMENTS_DISK: ${CLOUDFLARE_ATTACHMENTS_DISK:-s3}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+  AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-auto}
+  AWS_BUCKET: ${AWS_BUCKET}
+  AWS_ENDPOINT: ${AWS_ENDPOINT}
+  AWS_USE_PATH_STYLE_ENDPOINT: "true"
+
+  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+  VAPID_SUBJECT: ${VAPID_SUBJECT:-${SERVICE_URL_APP}}
+
+  CLOUDFLARE_SEND_DRIVER: ${CLOUDFLARE_SEND_DRIVER:-api}
+
+  # Native mail-app access. IMAP/SMTP autodiscover + CalDAV/CardDAV are ON here
+  # (this is the "with native" file); the DNS records are auto-provisioned per
+  # domain. MAIL_CLIENT_SERVER_HOST is where mail.<domain> CNAMEs point (this
+  # server), so clients can reach the bridge below.
+  MAIL_CLIENT_ACCESS: "true"
+  MAIL_CLIENT_DAV: "true"
+  MAIL_CLIENT_AUTO_DNS: ${MAIL_CLIENT_AUTO_DNS:-true}
+  MAIL_CLIENT_SERVER_HOST: ${MAIL_CLIENT_SERVER_HOST:-}
+  MAIL_CLIENT_IMAP_PORT: "993"
+  MAIL_CLIENT_SMTP_PORT: "587"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cloudflare-mailbox:latest
+    environment:
+      <<: *app-env
+      SERVICE_FQDN_APP_8080: /
+      AUTORUN_ENABLED: "true"
+      AUTORUN_LARAVEL_MIGRATION: "true"
+      AUTORUN_LARAVEL_STORAGE_LINK: "true"
+      AUTORUN_LARAVEL_CONFIG_CACHE: "true"
+      AUTORUN_LARAVEL_ROUTE_CACHE: "true"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  worker:
+    image: cloudflare-mailbox:latest
+    command: php artisan queue:work --sleep=1 --tries=3 --timeout=120 --max-time=3600
+    environment: *app-env
+    depends_on:
+      app:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scheduler:
+    image: cloudflare-mailbox:latest
+    command: sh -c "while true; do php artisan schedule:run --verbose --no-interaction; sleep 60; done"
+    environment: *app-env
+    depends_on:
+      app:
+        condition: service_started
+    restart: unless-stopped
+
+  # IMAP + SMTP bridge (raw TCP). Stateless — proxies to the app over the
+  # internal network, so no public URL round-trip and one shared deploy.
+  mailserver:
+    build:
+      context: ./mailserver
+    environment:
+      LARAVEL_API_URL: http://app:8080
+      MAIL_DOMAIN: ${MAIL_CLIENT_SERVER_HOST:-mail.example.com}
+      SMTP_ADDR: ":587"
+      IMAP_ADDR: ":993"
+      HEALTH_ADDR: ":8080"
+      TLS_CERT: ${TLS_CERT:-}
+      TLS_KEY: ${TLS_KEY:-}
+      ALLOW_INSECURE_AUTH: ${ALLOW_INSECURE_AUTH:-false}
+    ports:
+      - "587:587"   # SMTP submission (STARTTLS)
+      - "993:993"   # IMAP over TLS
+    volumes:
+      - ${TLS_DIR:-./certs}:/certs:ro
+    depends_on:
+      app:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-mailbox}
+      MYSQL_USER: ${MYSQL_USER:-mailbox}
+      MYSQL_PASSWORD: ${SERVICE_PASSWORD_MYSQL}
+      MYSQL_ROOT_PASSWORD: ${SERVICE_PASSWORD_MYSQLROOT}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${SERVICE_PASSWORD_MYSQLROOT}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+  redis-data:

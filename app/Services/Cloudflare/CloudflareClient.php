@@ -261,6 +261,37 @@ class CloudflareClient
         return $this->put("/zones/{$zoneId}/email/routing/rules/catch_all", $payload)['result'] ?? [];
     }
 
+    // --- Generic DNS records ---------------------------------------------
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function listDnsRecords(string $zoneId, array $query = []): array
+    {
+        return $this->get("/zones/{$zoneId}/dns_records", $query)['result'] ?? [];
+    }
+
+    /**
+     * Create or update a DNS record, matched by (type, name). Idempotent so
+     * re-running the mail-client setup never duplicates records.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function upsertDnsRecord(string $zoneId, array $payload): array
+    {
+        $existing = $this->listDnsRecords($zoneId, [
+            'type' => $payload['type'] ?? '',
+            'name' => $payload['name'] ?? '',
+        ]);
+
+        if (! empty($existing[0]['id'])) {
+            return $this->put("/zones/{$zoneId}/dns_records/{$existing[0]['id']}", $payload)['result'] ?? [];
+        }
+
+        return $this->post("/zones/{$zoneId}/dns_records", $payload)['result'] ?? [];
+    }
+
     // --- Sending ----------------------------------------------------------
 
     /**
