@@ -65,6 +65,31 @@ class ApiMailSender implements MailSender
     }
 
     /**
+     * Cloudflare's Email Sending API rejects platform-controlled headers
+     * (Message-ID, Date, MIME-Version, …) with E_HEADER_NOT_ALLOWED and
+     * first-class fields (From/To/Subject/…) with E_HEADER_USE_API_FIELD — a
+     * single disallowed header fails the whole send. We only ever set threading
+     * headers, so pass just the ones the API allows: In-Reply-To, References,
+     * and any X- prefixed custom header. In particular Message-ID must NOT be
+     * sent (Cloudflare generates its own).
+     *
+     * @param  array<string, mixed>  $headers
+     * @return array<string, mixed>
+     */
+    protected function allowedHeaders(array $headers): array
+    {
+        $out = [];
+        foreach ($headers as $name => $value) {
+            $n = strtolower((string) $name);
+            if ($n === 'in-reply-to' || $n === 'references' || str_starts_with($n, 'x-')) {
+                $out[$name] = $value;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  array<string, mixed>  $message
      * @return array<string, mixed>
      */
@@ -88,7 +113,7 @@ class ApiMailSender implements MailSender
             'subject' => $message['subject'] ?? null,
             'html' => $message['html'] ?? null,
             'text' => $message['text'] ?? null,
-            'headers' => $message['headers'] ?? null,
+            'headers' => $this->allowedHeaders($message['headers'] ?? []),
         ], fn ($v) => $v !== null && $v !== []);
 
         if (! empty($message['attachments'])) {

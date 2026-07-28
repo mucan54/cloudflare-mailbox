@@ -103,6 +103,34 @@ class MailboxApiTest extends TestCase
         ]);
     }
 
+    public function test_api_send_omits_message_id_but_keeps_reply_headers(): void
+    {
+        Http::fake(['*/email/sending/send' => Http::response([
+            'success' => true, 'errors' => [], 'result' => ['delivered' => ['peer@x.com'], 'queued' => [], 'permanent_bounces' => []],
+        ])]);
+
+        $mailbox = $this->mailbox();
+        $parent = $mailbox->emails()->create(['cloudflare_account_id' => $mailbox->cloudflare_account_id, 'ingest_key' => 'p1', 'subject' => 'Hi', 'message_id' => '<parent@x.com>', 'from_email' => 'peer@x.com', 'received_at' => now()]);
+
+        Sanctum::actingAs($mailbox);
+        $this->postJson('/api/mailbox/send', [
+            'to' => ['peer@x.com'], 'subject' => 'Re: Hi', 'text' => 'reply', 'in_reply_to_email_id' => $parent->id,
+        ])->assertStatus(201);
+
+        Http::assertSent(function ($request) {
+            $h = $request['headers'] ?? [];
+            // Cloudflare rejects a caller-set Message-ID — it must never be sent.
+            foreach (array_keys($h) as $k) {
+                if (strtolower((string) $k) === 'message-id') {
+                    return false;
+                }
+            }
+
+            // The allowed reply headers should still go out.
+            return ($h['In-Reply-To'] ?? null) === '<parent@x.com>' && isset($h['References']);
+        });
+    }
+
     public function test_send_with_attachment_forwards_it_and_stores_a_copy(): void
     {
         Storage::fake('local');
