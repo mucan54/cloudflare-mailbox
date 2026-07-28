@@ -430,14 +430,21 @@ watch(() => [props.folder, auth.active], () => {
 // keydown is bound only while this view is active (kept-alive but hidden
 // instances must not steal keystrokes from the message reader). onActivated
 // also fires right after the first onMounted.
+let savedScroll = 0;
 onActivated(() => {
     window.addEventListener('keydown', onKey);
+    // keep-alive re-attaches the list DOM but the scroller's scrollTop resets to
+    // 0, so returning from a message snapped the inbox to the top — the "blink".
+    // Restore it synchronously (before paint) so the list is exactly where it
+    // was, matching iOS's swipe-back snapshot for a seamless return.
+    if (listEl.value) listEl.value.scrollTop = savedScroll;
     // Returning to the list: refresh in the background so it's up to date
     // without a visible reload (poll only prepends genuinely new items).
     poll();
 });
 onDeactivated(() => {
     window.removeEventListener('keydown', onKey);
+    if (listEl.value) savedScroll = listEl.value.scrollTop;
 });
 
 onMounted(() => {
