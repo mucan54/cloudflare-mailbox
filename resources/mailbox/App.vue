@@ -8,6 +8,7 @@ import { t, i18n, setLocale, AVAILABLE } from './i18n';
 import {
     enablePushIfGranted, pushPermission, pushSupported, refreshPushPermission, requestAndSubscribe, vapidKey,
 } from './push';
+import EmailView from './views/EmailView.vue';
 
 const auth = useAuth();
 const ui = useUi();
@@ -16,6 +17,24 @@ const router = useRouter();
 
 const isLogin = computed(() => route.path === '/login');
 const showChrome = computed(() => auth.isAuthenticated && !isLogin.value);
+
+// A message is shown as an OVERLAY on top of the list it was opened from,
+// instead of a route that swaps the router-view. The underlying list is never
+// torn down and re-created, so returning (back button OR iOS swipe-back) reveals
+// the exact same, already-painted list — no async re-render, no re-attach
+// repaint: the blink is gone at the source. Deep-links/cold starts still work
+// because the base view falls back to the inbox.
+const isMailRoute = computed(() => route.path.startsWith('/mail/'));
+const lastBasePath = ref('/f/inbox');
+watch(() => route.fullPath, (p) => {
+    const path = route.path;
+    if (!isMailRoute.value && path !== '/compose' && path !== '/settings' && path !== '/login') {
+        lastBasePath.value = p;
+    }
+}, { immediate: true });
+// While a mail is open, keep the router-view rendering the base list (same
+// component + key → keep-alive holds the one instance, no deactivation).
+const baseRoute = computed(() => (isMailRoute.value ? router.resolve(lastBasePath.value) : route));
 
 // Route transition. On a browser BACK gesture (iOS interactive swipe-back) the
 // OS already slides the previous page in; running our own fade on top re-shows
@@ -267,13 +286,22 @@ onBeforeUnmount(() => {
             </aside>
 
             <main class="main">
-                <router-view v-slot="{ Component }">
+                <router-view :route="baseRoute" v-slot="{ Component, route: rendered }">
                     <transition :name="routeTransition">
                         <keep-alive :include="['Mailbox']">
-                            <component :is="Component" :key="route.fullPath" />
+                            <component :is="Component" :key="rendered.fullPath" />
                         </keep-alive>
                     </transition>
                 </router-view>
+
+                <!-- Message overlay (mobile): slides in over the list, removed
+                     instantly on back so it reveals the untouched list in sync
+                     with iOS's own swipe-back animation. -->
+                <transition name="mailslide">
+                    <div v-if="isMailRoute" class="mail-overlay">
+                        <EmailView />
+                    </div>
+                </transition>
             </main>
         </div>
 

@@ -376,6 +376,14 @@ svg { width: 100%; height: 100%; display: block; }
 .toast-undo { color: #6cb0e6; font-weight: 700; }
 .toast-x { color: rgba(255,255,255,.7); font-size: 12px; }
 
+/* ===== MESSAGE OVERLAY (mobile) ===== */
+.mail-overlay { position: fixed; inset: 0; z-index: 45; background: var(--panel); display: flex; flex-direction: column; }
+/* Slide in on open; NO leave transition, so back removes it instantly and the
+   untouched list underneath shows in sync with iOS's native swipe animation. */
+.mailslide-enter-active { transition: transform .24s cubic-bezier(.2,.8,.2,1); will-change: transform; }
+.mailslide-enter-from { transform: translateX(100%); }
+@media (prefers-reduced-motion: reduce) { .mailslide-enter-active { transition: none; } }
+
 /* ===== ROUTE TRANSITION ===== */
 .main { position: relative; }
 /* The entering view appears INSTANTLY (its content is already cached), while
