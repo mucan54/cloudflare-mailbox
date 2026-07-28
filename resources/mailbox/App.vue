@@ -8,8 +8,6 @@ import { t, i18n, setLocale, AVAILABLE } from './i18n';
 import {
     enablePushIfGranted, pushPermission, pushSupported, refreshPushPermission, requestAndSubscribe, vapidKey,
 } from './push';
-import EmailView from './views/EmailView.vue';
-
 const auth = useAuth();
 const ui = useUi();
 const route = useRoute();
@@ -18,23 +16,22 @@ const router = useRouter();
 const isLogin = computed(() => route.path === '/login');
 const showChrome = computed(() => auth.isAuthenticated && !isLogin.value);
 
-// A message is shown as an OVERLAY on top of the list it was opened from,
-// instead of a route that swaps the router-view. The underlying list is never
-// torn down and re-created, so returning (back button OR iOS swipe-back) reveals
-// the exact same, already-painted list — no async re-render, no re-attach
-// repaint: the blink is gone at the source. Deep-links/cold starts still work
-// because the base view falls back to the inbox.
-const isMailRoute = computed(() => route.path.startsWith('/mail/'));
+// ── Overlay navigation (kills the swipe-back blink, generically) ────────────
+// Full-screen "pushed" routes — a message, compose, settings — render as an
+// OVERLAY on top of the base list, instead of swapping the router-view. The
+// base list underneath is never torn down, so returning (back button OR iOS
+// swipe-back) just removes the overlay and reveals the exact same, already-
+// painted list. There's no async re-render / re-attach a frame after iOS has
+// revealed the DOM — which is what caused the blink on every back navigation.
+const OVERLAY_ROUTES = ['/mail/', '/compose', '/settings'];
+const isOverlayRoute = computed(() => OVERLAY_ROUTES.some((p) => (p.endsWith('/') ? route.path.startsWith(p) : route.path === p)));
 const lastBasePath = ref('/f/inbox');
 watch(() => route.fullPath, (p) => {
-    const path = route.path;
-    if (!isMailRoute.value && path !== '/compose' && path !== '/settings' && path !== '/login') {
-        lastBasePath.value = p;
-    }
+    if (!isOverlayRoute.value && route.path !== '/login') lastBasePath.value = p;
 }, { immediate: true });
-// While a mail is open, keep the router-view rendering the base list (same
-// component + key → keep-alive holds the one instance, no deactivation).
-const baseRoute = computed(() => (isMailRoute.value ? router.resolve(lastBasePath.value) : route));
+// While an overlay is open, keep the router-view pinned to the base list (same
+// component + keep-alive key → the one instance is held, never deactivated).
+const baseRoute = computed(() => (isOverlayRoute.value ? router.resolve(lastBasePath.value) : route));
 
 // Route transition. On a browser BACK gesture (iOS interactive swipe-back) the
 // OS already slides the previous page in; running our own fade on top re-shows
@@ -286,6 +283,8 @@ onBeforeUnmount(() => {
             </aside>
 
             <main class="main">
+                <!-- Base layer: the current list, or (while an overlay is open)
+                     the last list we were on — kept mounted underneath. -->
                 <router-view :route="baseRoute" v-slot="{ Component, route: rendered }">
                     <transition :name="routeTransition">
                         <keep-alive :include="['Mailbox']">
@@ -294,12 +293,15 @@ onBeforeUnmount(() => {
                     </transition>
                 </router-view>
 
-                <!-- Message overlay (mobile): slides in over the list, removed
-                     instantly on back so it reveals the untouched list in sync
-                     with iOS's own swipe-back animation. -->
+                <!-- Overlay layer: the actual full-screen route (message /
+                     compose / settings). Slides in on open; removed instantly on
+                     back so it reveals the untouched base list in sync with iOS's
+                     own swipe-back animation — no blink. -->
                 <transition name="mailslide">
-                    <div v-if="isMailRoute" class="mail-overlay">
-                        <EmailView />
+                    <div v-if="isOverlayRoute" class="mail-overlay">
+                        <router-view v-slot="{ Component }">
+                            <component :is="Component" />
+                        </router-view>
                     </div>
                 </transition>
             </main>
