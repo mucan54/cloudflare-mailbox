@@ -29,9 +29,14 @@ const lastBasePath = ref('/f/inbox');
 watch(() => route.fullPath, (p) => {
     if (!isOverlayRoute.value && route.path !== '/login') lastBasePath.value = p;
 }, { immediate: true });
-// While an overlay is open, keep the router-view pinned to the base list (same
-// component + keep-alive key → the one instance is held, never deactivated).
-const baseRoute = computed(() => (isOverlayRoute.value ? router.resolve(lastBasePath.value) : route));
+// The base layer ALWAYS renders `lastBasePath` (resolved), never the live route.
+// Crucially this means opening/closing an overlay does NOT change the base
+// router-view's :route — so the base list is not re-rendered or re-resolved, it
+// stays byte-identical to the frame iOS snapshotted before the swipe. (Deriving
+// it from the live `route` re-rendered the base on every overlay toggle, which
+// re-introduced the flash.) Its only dependency is lastBasePath, so it's a
+// stable object except when you actually switch base views.
+const baseRoute = computed(() => router.resolve(lastBasePath.value));
 
 // Route transition. On a browser BACK gesture (iOS interactive swipe-back) the
 // OS already slides the previous page in; running our own fade on top re-shows
