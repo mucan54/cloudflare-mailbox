@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Mailbox;
 use App\Http\Controllers\Controller;
 use App\Models\SentEmail;
 use App\Services\Mail\EmailSender;
+use App\Support\Snippet;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -57,7 +58,7 @@ class SendController extends Controller
             'to' => $s->to,
             'to_email' => implode(', ', (array) $s->to),
             'subject' => $s->subject,
-            'snippet' => Str::limit(strip_tags((string) ($s->text_body ?: $s->html_body)), 140),
+            'snippet' => Snippet::make($s->text_body, $s->html_body),
             'status' => $s->status,
             'sent_at' => $s->sent_at?->toIso8601String(),
             'received_at' => $s->sent_at?->toIso8601String(),

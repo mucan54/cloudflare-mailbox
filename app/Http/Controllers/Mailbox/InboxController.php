@@ -5,9 +5,9 @@ namespace App\Http\Controllers\Mailbox;
 use App\Http\Controllers\Controller;
 use App\Models\Email;
 use App\Models\SentEmail;
+use App\Support\Snippet;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 
 class InboxController extends Controller
 {
@@ -170,7 +170,7 @@ class InboxController extends Controller
             'to_email' => is_array($s->to) ? implode(', ', $s->to) : (string) $s->to,
             'cc' => $s->cc,
             'subject' => $s->subject,
-            'snippet' => Str::limit(strip_tags((string) ($s->text_body ?: $s->html_body)), 140),
+            'snippet' => Snippet::make($s->text_body, $s->html_body),
             'html_body' => $s->html_body,
             'text_body' => $s->text_body,
             'read' => true,
@@ -192,7 +192,7 @@ class InboxController extends Controller
             'from_email' => $e->from_email,
             'from_name' => $e->from_name,
             'subject' => $e->subject,
-            'snippet' => Str::limit(strip_tags((string) ($e->text_body ?: $e->html_body)), 140),
+            'snippet' => Snippet::make($e->text_body, $e->html_body),
             'read' => $e->read_at !== null,
             'starred' => $e->starred,
             'folder' => $e->folder,
