@@ -1,6 +1,6 @@
 // Mailbox PWA service worker (root scope). Handles install/activate, an
 // app-shell cache, and Web Push notifications.
-const CACHE = 'mailbox-v11';
+const CACHE = 'mailbox-v12';
 const SHELL = '/';
 
 // Shown ONLY when a navigation has neither network nor a cached shell: a
@@ -14,10 +14,6 @@ function reconnectResponse() {
         status: 200,
         headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
     });
-}
-
-function timeout(ms) {
-    return new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
 }
 
 // Retry a request over a few seconds — the just-woken network on resume fails
@@ -91,38 +87,46 @@ self.addEventListener('fetch', (event) => {
     if (url.origin !== self.location.origin) return; // leave cross-origin alone
     if (url.pathname.startsWith('/api/')) return;     // never cache the API
 
-    // Page navigations: NETWORK-FIRST with a short timeout, then the cached
-    // shell, then a self-reloading fallback.
+    // Page navigations: CACHE-FIRST for the app shell.
     //
-    // Why network-first (not cache-first): the shell references content-hashed
-    // assets. After a redeploy the *cached* shell can point at asset hashes that
-    // no longer exist on the server → 404 → white screen. The *fresh* shell
-    // always matches the live build, so its assets resolve. The 3s timeout
-    // bounds the wait so a flaky just-resumed network can't hang on white — it
-    // falls back to the cached shell (whose cached assets are consistent with
-    // it), and if even that is gone, to a spinner that retries. So a navigation
-    // never resolves to a permanent blank.
+    // This is what makes a resumed PWA boot reliably. When iOS jettisons the web
+    // view, reopening does a fresh navigation while the SW is cold-starting and
+    // the network stack is still waking up — a network-first fetch there hangs
+    // or fails and leaves a white screen. Serving the cached shell instantly
+    // boots the app with ZERO network dependency (offline-capable), then we
+    // revalidate in the background so the next launch is fresh. The shell and
+    // its hashed assets are cached together atomically (assets first, then the
+    // shell), so the cached shell always has matching cached assets. Only when
+    // there's no cached shell at all (first run / evicted) do we hit the network
+    // — with retries, then a self-reloading spinner rather than a dead blank.
     if (req.mode === 'navigate') {
         event.respondWith((async () => {
-            const net = fetch(req).then((res) => {
-                // A non-OK navigation (server restarting mid-deploy, 5xx, …)
-                // should fall back to the working cached app, not render an
-                // error page — so treat it like a network failure.
-                if (!res || !res.ok) throw new Error('bad navigation status');
-                if (res.type === 'basic') {
-                    const copy = res.clone();
-                    caches.open(CACHE).then((c) => c.put(SHELL, copy)).catch(() => {});
+            const cached = await caches.match(SHELL);
+            const revalidate = (async () => {
+                try {
+                    const res = await fetch(req);
+                    if (res && res.ok && res.type === 'basic') {
+                        const cache = await caches.open(CACHE);
+                        if (await precacheBuild(cache)) await cache.put(SHELL, res.clone());
+                    }
+                } catch (_) {
+                    // Offline / cold network — keep serving the cached shell.
+                }
+            })();
+            if (cached) {
+                event.waitUntil(revalidate);
+                return cached;
+            }
+            // Nothing cached yet: network with retries, then the spinner.
+            try {
+                const res = await fetchWithRetry(req);
+                if (res && res.ok && res.type === 'basic') {
+                    const cache = await caches.open(CACHE);
+                    if (await precacheBuild(cache)) cache.put(SHELL, res.clone()).catch(() => {});
                 }
                 return res;
-            });
-            try {
-                return await Promise.race([net, timeout(3000)]);
             } catch (_) {
-                // A slow network can still finish and refresh the cache for next
-                // time; meanwhile serve the last good shell, or the spinner.
-                event.waitUntil(net.catch(() => {}));
-                const cached = await caches.match(SHELL);
-                return cached || reconnectResponse();
+                return reconnectResponse();
             }
         })());
         return;
