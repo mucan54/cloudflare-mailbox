@@ -70,16 +70,17 @@ services:
       redis:
         condition: service_started
     # DB-INDEPENDENT health check: Laravel's /up returns 200 without touching
-    # MySQL/Redis, so a transient database blip does NOT mark the app unhealthy
-    # (which previously cascaded into the container being stopped and then pruned
-    # by Coolify's nightly cleanup, taking the whole stack down). Long
-    # start_period covers boot + migrations.
+    # MySQL/Redis. It must be VERY tolerant: on this shared 4-core host, a brief
+    # CPU/DB congestion can slow /up for a minute or two, and Coolify STOPS the
+    # whole app when the container reports unhealthy (and unless-stopped then
+    # keeps it down). ~10 consecutive misses over 30s ≈ a 5-minute real outage
+    # before we flip unhealthy — not a transient spike.
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/up || exit 1"]
       interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 90s
+      timeout: 20s
+      retries: 10
+      start_period: 120s
     # Soft reservation — protects this stack from noisy neighbours on a busy host
     # without a hard cap (a hard limit + no swap would risk cgroup-OOM kills).
     mem_reservation: 384m
