@@ -17,6 +17,7 @@ export default {
         movedN: '{n} ileti taşındı', newMail: '{n} yeni ileti ↑', selectToRead: 'Okumak için bir ileti seçin',
         selectSub: 'Soldaki listeden bir öğe seçin veya', composeLink: 'yeni ileti yazın', attachments: 'Ek',
         saveAll: 'Ekleri kaydet', quotedText: 'Alıntılanan metin', you: 'Siz',
+        from: 'Gönderen', date: 'Tarih', senderDetails: 'Gönderen bilgileri',
         items: '{n} öğe', unreadCount: '{n} okunmamış', notFound: 'İleti bulunamadı.', message: 'İleti', sentItem: 'Gönderilen',
     },
     compose: {

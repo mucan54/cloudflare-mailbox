@@ -27,8 +27,22 @@ const avatarName = computed(() => props.msg.from_name || props.msg.from_email ||
 const seed = computed(() => props.msg.from_email || '');
 const toLine = computed(() => props.msg.to_email || '');
 
+// Sender/recipient details, toggled by tapping the name — so you can see WHO
+// actually sent a message (name + real address), who it went to, and when.
+const showDetails = ref(false);
+function toggleDetails() { showDetails.value = !showDetails.value; }
+const fromFull = computed(() => {
+    const e = props.msg.from_email || '';
+    const n = props.msg.from_name || '';
+    return n && n !== e ? `${n} <${e}>` : (e || n);
+});
+const ccLine = computed(() => {
+    const cc = props.msg.cc;
+    return Array.isArray(cc) ? cc.join(', ') : (cc || '');
+});
+
 // Follow the parent's expanded intent when this card is (re)assigned a message.
-watch(() => props.msg.id, () => { open.value = props.expanded; });
+watch(() => props.msg.id, () => { open.value = props.expanded; showDetails.value = false; });
 
 function fmt(iso) {
     if (!iso) return '';
@@ -36,6 +50,9 @@ function fmt(iso) {
     const now = new Date();
     if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString(localeTag(), { hour: '2-digit', minute: '2-digit' });
     return d.toLocaleDateString(localeTag(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+function fmtFull(iso) {
+    return iso ? new Date(iso).toLocaleString(localeTag(), { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 }
 
 function toggleOpen() {
@@ -169,17 +186,28 @@ defineExpose({ open });
 
 <template>
     <div class="msg" :class="{ open, collapsible }">
-        <button type="button" class="msg-head" @click="toggleOpen">
+        <div class="msg-head" :class="{ tappable: collapsible }" @click="toggleOpen">
             <span class="ava" :style="{ background: avatarColor(seed) }">{{ initials(avatarName) }}</span>
             <span class="msg-hmeta">
                 <span class="msg-line1">
-                    <span class="msg-who">{{ who }}</span>
+                    <button type="button" class="msg-who" :class="{ open: showDetails }" :title="t('mail.senderDetails')" @click.stop="toggleDetails">
+                        <span class="msg-who-name">{{ who }}</span>
+                        <svg class="msg-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
                     <span class="msg-time">{{ fmt(msg.received_at) }}</span>
                 </span>
-                <span v-if="open" class="msg-to">{{ t('mail.toShort') }}: {{ toLine }}</span>
-                <span v-else class="msg-snip">{{ msg.snippet }}</span>
+                <span v-if="!open" class="msg-snip">{{ msg.snippet }}</span>
+                <span v-else-if="!showDetails" class="msg-to">{{ t('mail.toShort') }}: {{ toLine }}</span>
             </span>
-        </button>
+        </div>
+
+        <!-- Sender/recipient details, revealed by tapping the name. -->
+        <div v-if="open && showDetails" class="msg-details">
+            <div class="d-row"><span class="d-k">{{ t('mail.from') }}</span><span class="d-v">{{ fromFull }}</span></div>
+            <div class="d-row"><span class="d-k">{{ t('mail.toShort') }}</span><span class="d-v">{{ toLine }}</span></div>
+            <div v-if="ccLine" class="d-row"><span class="d-k">Cc</span><span class="d-v">{{ ccLine }}</span></div>
+            <div class="d-row"><span class="d-k">{{ t('mail.date') }}</span><span class="d-v">{{ fmtFull(msg.received_at) }}</span></div>
+        </div>
 
         <div v-show="open" class="msg-body-wrap">
             <div v-if="msg.attachments?.length" class="rd-atts">
