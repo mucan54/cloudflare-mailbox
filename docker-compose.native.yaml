@@ -106,7 +106,13 @@ services:
 
   worker:
     image: cloudflare-mailbox:latest
-    command: php artisan queue:work --sleep=1 --tries=3 --timeout=120 --max-time=3600
+    # Wrap queue:work in a shell loop (like the scheduler) so the PHP process
+    # still self-renews hourly (--max-time, avoids leaks) but the CONTAINER
+    # never exits/restarts. The hourly exit→restart window was being caught by
+    # Coolify's status poll, misread as "unhealthy", and triggered a stop of the
+    # WHOLE app (which unless-stopped then kept down). The `sleep 1` guards
+    # against a hot crash-loop if queue:work ever exits immediately.
+    command: sh -c "while true; do php artisan queue:work --sleep=1 --tries=3 --timeout=120 --max-time=3600; sleep 1; done"
     environment: *app-env
     depends_on:
       app:
