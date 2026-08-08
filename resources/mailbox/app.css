@@ -252,12 +252,21 @@ svg { width: 100%; height: 100%; display: block; }
 .cv-thread { display: flex; flex-direction: column; }
 .msg { border-top: 1px solid var(--line); padding: 14px 0 4px; }
 .msg:first-child { border-top: none; }
-.msg-head { display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left; background: none; border: none; padding: 0; cursor: default; }
-.msg.collapsible .msg-head { cursor: pointer; }
+.msg-head { display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left; }
+.msg-head.tappable { cursor: pointer; }
 .msg-head .ava { flex: none; width: 40px; height: 40px; min-width: 40px; max-width: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 600; font-size: 14px; }
 .msg-hmeta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .msg-line1 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.msg-who { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msg-who { display: inline-flex; align-items: center; gap: 3px; min-width: 0; max-width: 100%; font-weight: 600; font-size: 15px; color: var(--text); background: none; border: none; padding: 0; cursor: pointer; overflow: hidden; }
+.msg-who-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.msg-chev { flex: none; width: 15px; height: 15px; color: var(--muted); transition: transform .15s ease; }
+.msg-who.open { color: var(--brand); }
+.msg-who.open .msg-chev { transform: rotate(180deg); color: var(--brand); }
+.msg-details { margin: 6px 0 2px 52px; padding: 8px 12px; background: var(--panel-2); border-radius: var(--radius-sm); font-size: 12.5px; line-height: 1.55; display: flex; flex-direction: column; gap: 2px; }
+@media (max-width: 560px) { .msg-details { margin-left: 0; } }
+.d-row { display: flex; gap: 6px; }
+.d-k { flex: none; min-width: 64px; color: var(--muted); font-weight: 600; }
+.d-v { color: var(--text); word-break: break-word; }
 .msg-time { flex: none; font-size: 12.5px; color: var(--muted); }
 .msg-to { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .msg-snip { font-size: 13.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
