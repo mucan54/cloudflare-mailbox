@@ -29,7 +29,7 @@ async function submit() {
 <template>
     <div class="login">
         <form class="lg-card" @submit.prevent="submit">
-            <div class="lg-logo">📬</div>
+            <img class="lg-logo" :src="'/icons/logo.svg'" alt="" width="72" height="72" />
             <h1 class="lg-title">{{ adding ? t('login.addTitle') : t('login.title') }}</h1>
             <p class="lg-sub">{{ adding ? t('login.addSub') : t('login.sub') }}</p>
 

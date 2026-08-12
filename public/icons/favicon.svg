@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- Cloud + envelope mark. Cloudflare orange, transparent interior. -->
+  <g stroke="#F6821F" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Cloud (feather-style outline), scaled -->
+    <g transform="translate(64,40) scale(15.5)" stroke-width="1.55">
+      <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+    </g>
+    <!-- Little curl/tail at the top-right of the cloud -->
+    <path d="M382 148 c 30 -10 46 20 24 36 c -14 10 -30 -2 -24 -18"/>
+    <!-- Envelope, filled so it sits in front of the cloud's lower edge -->
+    <rect x="176" y="240" width="160" height="104" rx="15" fill="#ffffff"/>
+    <path d="M188 254 L256 304 L324 254"/>
+  </g>
+</svg>

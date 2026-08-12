@@ -81,6 +81,7 @@ svg { width: 100%; height: 100%; display: block; }
     }
     :root.dark .topbar { background: #1f1e1d; }
     .tb-brand { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; padding-right: 8px; }
+    .tb-logo { width: 26px; height: 26px; display: block; flex: none; }
     .tb-search { flex: 1; max-width: 720px; margin: 0 auto; display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: var(--radius-sm); background: rgba(255,255,255,.18); }
     .tb-search:focus-within { background: #fff; color: var(--text); }
     .tb-search .si { width: 16px; height: 16px; opacity: .9; flex: none; }
@@ -405,7 +406,7 @@ svg { width: 100%; height: 100%; display: block; }
 /* ===== LOGIN ===== */
 .login { min-height: 100dvh; display: grid; place-items: center; padding: calc(24px + env(safe-area-inset-top)) 22px calc(24px + env(safe-area-inset-bottom)); background: var(--bg); }
 .lg-card { width: 100%; max-width: 380px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 30px 26px; display: flex; flex-direction: column; gap: 12px; }
-.lg-logo { font-size: 40px; }
+.lg-logo { width: 72px; height: 72px; display: block; margin: 0 auto; }
 .lg-title { margin: 4px 0 0; font-size: 24px; font-weight: 600; }
 .lg-sub { margin: 0 0 8px; color: var(--muted); font-size: 14px; }
 .lg-in { padding: 13px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); font-size: 15px; outline: none; background: var(--panel-2); color: var(--text); }
