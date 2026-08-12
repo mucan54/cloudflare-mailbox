@@ -1,4 +1,8 @@
-# Cloudflare Mailbox
+<p align="center">
+  <img src="public/icons/logo.svg" width="104" height="104" alt="Cloudflare Mailbox logo">
+</p>
+
+<h1 align="center">Cloudflare Mailbox</h1>
 
 A multi-tenant web mail service built on **Cloudflare Email Service** (Sending +
 Routing), with a **Laravel + Filament** admin panel and a **headless Vue SPA (PWA)**

@@ -110,6 +110,7 @@ class EmailSenderTest extends TestCase
 
         $this->assertSame('failed', $sent->status);
         $this->assertStringContainsString('Onboard Domain', $sent->error);
+        $this->assertStringContainsString('dash.cloudflare.com/acc1/email/sending', $sent->error);
     }
 
     public function test_size_limit_is_enforced(): void
