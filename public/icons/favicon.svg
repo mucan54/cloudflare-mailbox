@@ -1,14 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <!-- Cloud + envelope mark. Cloudflare orange, transparent interior. -->
-  <g stroke="#F6821F" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Cloud (feather-style outline), scaled -->
-    <g transform="translate(64,40) scale(15.5)" stroke-width="1.55">
-      <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
-    </g>
-    <!-- Little curl/tail at the top-right of the cloud -->
-    <path d="M382 148 c 30 -10 46 20 24 36 c -14 10 -30 -2 -24 -18"/>
-    <!-- Envelope, filled so it sits in front of the cloud's lower edge -->
-    <rect x="176" y="240" width="160" height="104" rx="15" fill="#ffffff"/>
-    <path d="M188 254 L256 304 L324 254"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Cloudflare Mailbox logo</title>
+  <desc id="desc">Minimal orange cloud and envelope mailbox icon.</desc>
+  <g fill="none" stroke="#FF7A00" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M126 314 H112 C72 314 40 282 40 242 C40 204 69 173 106 170 C112 112 160 68 219 68 C278 68 327 112 333 170 H348 C391 170 426 205 426 248 C426 285 398 316 362 322" />
+    <rect x="136" y="240" width="222" height="154" rx="28" ry="28" />
+    <path d="M150 258 L247 338 L344 258" />
+    <path d="M357 199 V126 H402" />
   </g>
 </svg>
