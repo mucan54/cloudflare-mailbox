@@ -17,7 +17,7 @@ class ApiMailSender implements MailSender
         try {
             $result = CloudflareClient::forAccount($account)->send($this->toApiPayload($message));
         } catch (CloudflareException $e) {
-            return SendResult::failed($this->explain($e), ['errors' => $e->errors]);
+            return SendResult::failed($this->explain($e, $account), ['errors' => $e->errors]);
         }
 
         if (! empty($result['permanent_bounces'])) {
@@ -46,22 +46,41 @@ class ApiMailSender implements MailSender
 
     /**
      * Turn a raw Cloudflare send error into an actionable message.
+     *
+     * Email Sending onboarding cannot be done through the Cloudflare API (it is
+     * dashboard-only), so for the "not onboarded / unverified" errors we append
+     * a direct deep-link to this account's Email Sending page.
      */
-    protected function explain(CloudflareException $e): string
+    protected function explain(CloudflareException $e, CloudflareAccount $account): string
     {
         $msg = $e->getMessage();
+        $link = $this->dashboardSendingUrl($account);
 
         if (str_contains($msg, 'sending_disabled')) {
             return $msg.' — Bu domain Cloudflare’de Email Sending için onboard edilmemiş '
                 .'(ya da yalnızca doğrulanmış hedeflere gönderime açık). Çözüm: Cloudflare Dashboard → '
-                .'Compute → Email Service → Email Sending → “Onboard Domain” ile domaini ekleyin.';
+                .'Compute → Email Service → Email Sending → “Onboard Domain” ile domaini ekleyin.'
+                .($link ? ' Panel: '.$link : '');
         }
 
         if (str_contains($msg, 'sender') && str_contains($msg, 'verif')) {
-            return $msg.' — Gönderen domain doğrulanmamış. Email Sending onboarding’ini (DKIM dahil) tamamlayın.';
+            return $msg.' — Gönderen domain doğrulanmamış. Email Sending onboarding’ini (DKIM dahil) tamamlayın.'
+                .($link ? ' Panel: '.$link : '');
         }
 
         return $msg;
+    }
+
+    /**
+     * Deep-link to this account's Email Sending page in the Cloudflare
+     * dashboard, where a domain is onboarded ("Onboard Domain"). Null when the
+     * account id is unknown.
+     */
+    protected function dashboardSendingUrl(CloudflareAccount $account): ?string
+    {
+        return filled($account->account_id)
+            ? 'https://dash.cloudflare.com/'.$account->account_id.'/email/sending'
+            : null;
     }
 
     /**

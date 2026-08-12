@@ -212,7 +212,7 @@ onBeforeUnmount(() => {
 <template>
     <div v-if="showChrome" class="app">
         <header class="topbar">
-            <div class="tb-brand">📬 <span>{{ t('brand') }}</span></div>
+            <div class="tb-brand"><img class="tb-logo" :src="'/icons/logo.svg'" alt="" width="26" height="26" /> <span>{{ t('brand') }}</span></div>
             <div class="tb-search">
                 <svg viewBox="0 0 24 24" class="si"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M21 21l-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
                 <input v-model="ui.search" type="search" :placeholder="t('mail.searchTop')" />

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- Maskable app icon: white ground + logo inside the safe zone. -->
+  <rect width="512" height="512" fill="#ffffff"/>
+  <g transform="translate(74.3,75.8) scale(0.78)">
+    <g fill="none" stroke="#FF7A00" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M126 314 H112 C72 314 40 282 40 242 C40 204 69 173 106 170 C112 112 160 68 219 68 C278 68 327 112 333 170 H348 C391 170 426 205 426 248 C426 285 398 316 362 322" />
+      <rect x="136" y="240" width="222" height="154" rx="28" ry="28" />
+      <path d="M150 258 L247 338 L344 258" />
+      <path d="M357 199 V126 H402" />
+    </g>
+  </g>
+</svg>

@@ -1,41 +1,54 @@
 <x-filament-widgets::widget>
     <x-filament::section>
-        <div class="flex items-center justify-between gap-4">
-            <div>
-                <h3 class="text-base font-semibold text-gray-950 dark:text-white">
-                    {{ $this->isComplete() ? __('You’re all set 🎉') : __('Finish setting up your mail service') }}
-                </h3>
-                <p class="text-sm text-gray-500 dark:text-gray-400">
-                    {{ $this->getDoneCount() }}/{{ $this->getTotalCount() }} {{ __('steps completed') }}
-                </p>
+        @if ($this->isComplete())
+            {{-- Compact success state — no clutter once everything is done. --}}
+            <div class="flex items-center gap-4">
+                <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-success-50 dark:bg-success-500/10">
+                    <x-filament::icon icon="heroicon-s-check-badge" class="h-7 w-7 text-success-500" />
+                </div>
+                <div class="min-w-0">
+                    <h3 class="text-base font-semibold text-gray-950 dark:text-white">
+                        {{ __('You’re all set 🎉') }}
+                    </h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                        {{ __('Your mail service is fully configured and ready.') }}
+                    </p>
+                </div>
             </div>
-            <span @class([
-                'text-sm font-semibold',
-                'text-success-600 dark:text-success-400' => $this->isComplete(),
-                'text-primary-600 dark:text-primary-400' => ! $this->isComplete(),
-            ])>{{ $this->getProgress() }}%</span>
-        </div>
+        @else
+            {{-- Header: progress ring + title --}}
+            <div class="flex items-center gap-4">
+                <div class="shrink-0 text-gray-950 dark:text-white" style="position:relative;width:56px;height:56px;">
+                    <svg width="56" height="56" viewBox="0 0 40 40" style="transform:rotate(-90deg)">
+                        <circle cx="20" cy="20" r="15.9155" fill="none" stroke="currentColor"
+                                stroke-opacity="0.12" stroke-width="3.5" />
+                        <circle cx="20" cy="20" r="15.9155" fill="none" stroke="currentColor"
+                                class="text-primary-500" stroke-width="3.5" stroke-linecap="round"
+                                stroke-dasharray="100" stroke-dashoffset="{{ 100 - $this->getProgress() }}"
+                                style="transition:stroke-dashoffset .5s ease" />
+                    </svg>
+                    <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;"
+                          class="text-sm font-bold">{{ $this->getProgress() }}%</span>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <h3 class="text-base font-semibold text-gray-950 dark:text-white">
+                        {{ __('Finish setting up your mail service') }}
+                    </h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                        {{ $this->getDoneCount() }}/{{ $this->getTotalCount() }} {{ __('steps completed') }}
+                    </p>
+                </div>
+            </div>
 
-        {{-- progress bar --}}
-        <div class="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-white/10">
-            <div @class([
-                    'h-full rounded-full transition-all',
-                    'bg-success-500' => $this->isComplete(),
-                    'bg-primary-500' => ! $this->isComplete(),
-                ])
-                style="width: {{ $this->getProgress() }}%"></div>
-        </div>
-
-        {{-- steps --}}
-        <ul role="list" class="mt-4 space-y-2">
-            @foreach ($this->getItems() as $index => $item)
-                <li>
+            {{-- Steps: one clean divided list rather than four heavy cards --}}
+            <div class="mt-5 overflow-hidden rounded-xl border border-gray-200 dark:border-white/10">
+                @foreach ($this->getItems() as $index => $item)
                     <div @class([
-                        'flex items-start gap-3 rounded-xl border p-3 transition',
-                        'border-success-200 bg-success-50/50 dark:border-success-500/20 dark:bg-success-500/5' => $item['done'],
-                        'border-gray-200 bg-white hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10' => ! $item['done'],
+                        'flex items-center gap-3 p-3',
+                        'border-t border-gray-100 dark:border-white/5' => $index > 0,
+                        'bg-gray-50/60 dark:bg-white/5' => $item['done'],
                     ])>
-                        <div class="mt-0.5 shrink-0">
+                        <div class="shrink-0">
                             @if ($item['done'])
                                 <x-filament::icon icon="heroicon-s-check-circle" class="h-6 w-6 text-success-500" />
                             @else
@@ -48,11 +61,11 @@
                         <div class="min-w-0 flex-1">
                             <p @class([
                                 'text-sm font-medium',
-                                'text-gray-500 line-through dark:text-gray-500' => $item['done'],
+                                'text-gray-400 line-through dark:text-gray-500' => $item['done'],
                                 'text-gray-950 dark:text-white' => ! $item['done'],
                             ])>{{ $item['label'] }}</p>
                             @unless ($item['done'])
-                                <p class="text-xs text-gray-500 dark:text-gray-400">{{ $item['hint'] }}</p>
+                                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ $item['hint'] }}</p>
                             @endunless
                         </div>
 
@@ -67,8 +80,8 @@
                             </x-filament::button>
                         @endif
                     </div>
-                </li>
-            @endforeach
-        </ul>
+                @endforeach
+            </div>
+        @endif
     </x-filament::section>
 </x-filament-widgets::widget>
