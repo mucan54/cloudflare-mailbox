@@ -11,6 +11,28 @@ each address its own installable, push-notified inbox.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design.
 
+## Screenshots
+
+> Populated with demo data — reproduce locally with
+> `php artisan migrate:fresh && php artisan db:seed --class=DemoSeeder`
+> (admin `admin@example.com` / `password`, mailbox `ada@acme.com` / `password`).
+
+**Admin panel** (Filament)
+
+| Dashboard | Domains | Sent log |
+|:---:|:---:|:---:|
+| [<img src="docs/screenshots/admin-dashboard.png" width="260">](docs/screenshots/admin-dashboard.png) | [<img src="docs/screenshots/admin-domains.png" width="260">](docs/screenshots/admin-domains.png) | [<img src="docs/screenshots/admin-sent.png" width="260">](docs/screenshots/admin-sent.png) |
+
+**Mailbox portal** (Vue PWA)
+
+| Inbox | Conversation | Calendar |
+|:---:|:---:|:---:|
+| [<img src="docs/screenshots/mailbox-inbox.png" width="260">](docs/screenshots/mailbox-inbox.png) | [<img src="docs/screenshots/mailbox-conversation.png" width="260">](docs/screenshots/mailbox-conversation.png) | [<img src="docs/screenshots/mailbox-calendar.png" width="260">](docs/screenshots/mailbox-calendar.png) |
+
+| People | Tasks | Mobile (installable PWA) |
+|:---:|:---:|:---:|
+| [<img src="docs/screenshots/mailbox-people.png" width="260">](docs/screenshots/mailbox-people.png) | [<img src="docs/screenshots/mailbox-tasks.png" width="260">](docs/screenshots/mailbox-tasks.png) | [<img src="docs/screenshots/mobile-inbox.png" width="150">](docs/screenshots/mobile-inbox.png) |
+
 ## What it does
 
 - **Admin panel** (`/admin`, Filament, multi-tenant — one Cloudflare account = one
