@@ -1,7 +1,13 @@
 // Mailbox PWA service worker (root scope). Handles install/activate, an
 // app-shell cache, and Web Push notifications.
-const CACHE = 'mailbox-v12';
+const CACHE = 'mailbox-v13';
 const SHELL = '/';
+
+// Server-rendered pages the SPA shell must never answer: the Filament admin
+// panel, Livewire, and the routes in routes/web.php that sit outside the SPA
+// catch-all (mirror its exclusions). Serving the shell for these breaks them —
+// e.g. after an admin login, /admin would keep showing the cached login page.
+const SERVER_PAGES = /^\/(admin|api|livewire|build|storage|up|locale|calendar|dav|autodiscover|\.well-known|mail\/config-v1\.1\.xml|mail\/profile\/)/i;
 
 // Shown ONLY when a navigation has neither network nor a cached shell: a
 // spinner that reloads itself, so a cold/evicted PWA on a momentarily dead
@@ -100,12 +106,16 @@ self.addEventListener('fetch', (event) => {
     // there's no cached shell at all (first run / evicted) do we hit the network
     // — with retries, then a self-reloading spinner rather than a dead blank.
     if (req.mode === 'navigate') {
+        if (SERVER_PAGES.test(url.pathname)) return; // plain network, never the shell
+
         event.respondWith((async () => {
             const cached = await caches.match(SHELL);
             const revalidate = (async () => {
                 try {
-                    const res = await fetch(req);
-                    if (res && res.ok && res.type === 'basic') {
+                    // Refresh the shell itself — not whatever URL was navigated
+                    // to — so only the real SPA shell is ever stored under SHELL.
+                    const res = await fetch(SHELL, { cache: 'no-cache' });
+                    if (res && res.ok && res.type === 'basic' && !res.redirected) {
                         const cache = await caches.open(CACHE);
                         if (await precacheBuild(cache)) await cache.put(SHELL, res.clone());
                     }
@@ -120,7 +130,7 @@ self.addEventListener('fetch', (event) => {
             // Nothing cached yet: network with retries, then the spinner.
             try {
                 const res = await fetchWithRetry(req);
-                if (res && res.ok && res.type === 'basic') {
+                if (res && res.ok && res.type === 'basic' && !res.redirected) {
                     const cache = await caches.open(CACHE);
                     if (await precacheBuild(cache)) cache.put(SHELL, res.clone()).catch(() => {});
                 }
