@@ -32,6 +32,10 @@ RUN composer install --no-dev --no-interaction --prefer-dist --no-scripts --opti
 COPY --chown=www-data:www-data . .
 COPY --chown=www-data:www-data --from=assets /app/public/build ./public/build
 
+# Serve sw.js uncached — the image's default 1-year immutable header for *.js
+# lets Cloudflare pin an old service worker (see docker/nginx/pwa.conf).
+COPY docker/nginx/pwa.conf /etc/nginx/server-opts.d/pwa.conf
+
 # Pre-install the inbound Worker's dependencies (postal-mime, wrangler) so
 # `php artisan cf:deploy-worker` can bundle & deploy without a cold npm install.
 RUN cd cf && npm install --no-audit --no-fund || true
