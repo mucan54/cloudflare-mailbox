@@ -5,6 +5,7 @@ import { useAuth } from '../stores/auth';
 import { useUi } from '../stores/ui';
 import { t } from '../i18n';
 import { requestAndSubscribe, enablePushIfGranted, notificationPermission, pushSupported } from '../push';
+import { initials, avatarColor, avatarSrc, avatarFailed, squareJpeg } from '../avatar';
 
 const auth = useAuth();
 const ui = useUi();
@@ -14,6 +15,7 @@ const route = useRoute();
 const email = ref(route.query.acc || auth.current?.email || '');
 const displayName = ref('');
 const signature = ref('');
+const avatarInSignature = ref(false);
 const busy = ref(false);
 
 // password
@@ -27,16 +29,61 @@ function loadAccount() {
     const a = auth.accountByEmail(email.value);
     displayName.value = a?.display_name || '';
     signature.value = a?.signature || '';
+    avatarInSignature.value = !!a?.avatar_in_signature;
 }
 watch(email, loadAccount, { immediate: true });
 
 async function saveProfile() {
     busy.value = true;
     try {
-        await auth.updateProfile(email.value, { display_name: displayName.value, signature: signature.value });
+        await auth.updateProfile(email.value, {
+            display_name: displayName.value,
+            signature: signature.value,
+            avatar_in_signature: avatarInSignature.value,
+        });
         ui.toast(t('profile.saved'));
     } finally {
         busy.value = false;
+    }
+}
+
+// ----- profile photo -----
+const account = computed(() => auth.accountByEmail(email.value));
+const photoUrl = computed(() => avatarSrc(account.value?.avatar_url));
+const photoInput = ref(null);
+const photoBusy = ref(false);
+const photoError = ref('');
+function pickPhoto() {
+    photoInput.value?.click();
+}
+async function onPhoto(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    photoError.value = '';
+    photoBusy.value = true;
+    try {
+        // Square-crop + shrink in the browser; fall back to the original file.
+        const blob = (await squareJpeg(file)) || file;
+        await auth.uploadAvatar(email.value, blob);
+        ui.toast(t('profile.photoSaved'));
+    } catch (err) {
+        photoError.value = err.response?.data?.errors?.avatar?.[0] || err.response?.data?.message || t('profile.photoFailed');
+    } finally {
+        photoBusy.value = false;
+    }
+}
+async function removePhoto() {
+    photoError.value = '';
+    photoBusy.value = true;
+    try {
+        await auth.removeAvatar(email.value);
+        avatarInSignature.value = false;
+        ui.toast(t('profile.photoRemoved'));
+    } catch (_) {
+        photoError.value = t('profile.photoFailed');
+    } finally {
+        photoBusy.value = false;
     }
 }
 
@@ -125,6 +172,24 @@ async function changePassword() {
                         <option v-for="a in auth.accounts" :key="a.email" :value="a.email">{{ a.email }}</option>
                     </select>
                 </label>
+                <div class="set-photo">
+                    <span class="ava set-photo-ava" :style="{ background: avatarColor(email) }">
+                        <img v-if="photoUrl" :src="photoUrl" alt="" class="ava-img" @error="avatarFailed(photoUrl)" />
+                        <template v-else>{{ initials(displayName || email) }}</template>
+                    </span>
+                    <div class="set-photo-meta">
+                        <span class="set-photo-title">{{ t('profile.photo') }}</span>
+                        <span class="set-photo-hint">{{ t('profile.photoHint') }}</span>
+                        <div class="set-photo-actions">
+                            <button class="btn ghost" :disabled="photoBusy" @click="pickPhoto">
+                                {{ photoBusy ? '…' : (account?.avatar_url ? t('profile.photoChange') : t('profile.photoUpload')) }}
+                            </button>
+                            <button v-if="account?.avatar_url" class="btn danger" :disabled="photoBusy" @click="removePhoto">{{ t('profile.photoRemove') }}</button>
+                        </div>
+                    </div>
+                    <input ref="photoInput" type="file" accept="image/*" class="cp-file" @change="onPhoto" />
+                </div>
+                <p v-if="photoError" class="error">{{ photoError }}</p>
                 <label class="fld">
                     <span>{{ t('profile.displayName') }}</span>
                     <input v-model="displayName" type="text" :placeholder="t('profile.displayNamePh')" />
@@ -132,6 +197,13 @@ async function changePassword() {
                 <label class="fld">
                     <span>{{ t('profile.signature') }}</span>
                     <textarea v-model="signature" rows="5" class="set-area" :placeholder="t('profile.signaturePh')" />
+                </label>
+                <label class="set-check" :class="{ disabled: !account?.avatar_url }">
+                    <input v-model="avatarInSignature" type="checkbox" :disabled="!account?.avatar_url" />
+                    <span>
+                        {{ t('profile.photoInSignature') }}
+                        <small>{{ account?.avatar_url ? t('profile.photoInSignatureHint') : t('profile.photoInSignatureNeedsPhoto') }}</small>
+                    </span>
                 </label>
                 <div class="settings-actions">
                     <button class="btn" :disabled="busy" @click="saveProfile">{{ t('profile.save') }}</button>

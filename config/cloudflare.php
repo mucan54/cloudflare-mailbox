@@ -131,6 +131,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Profile photos
+    |--------------------------------------------------------------------------
+    |
+    | Disk for mailbox profile photos. Defaults to the attachments disk. Photos
+    | are normalized to a small square JPEG and served through /avatars/{token}
+    | (the disk itself can stay private).
+    |
+    */
+
+    'avatars_disk' => env('CLOUDFLARE_AVATARS_DISK'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Worker deploy
     |--------------------------------------------------------------------------
     |

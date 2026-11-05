@@ -22,6 +22,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::put('/me', [AuthController::class, 'updateProfile']);
+    Route::post('/me/avatar', [AuthController::class, 'updateAvatar'])->middleware('throttle:20,1');
+    Route::delete('/me/avatar', [AuthController::class, 'deleteAvatar']);
     Route::put('/password', [AuthController::class, 'updatePassword']);
 
     Route::get('/emails', [InboxController::class, 'index']);

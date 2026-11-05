@@ -9,6 +9,7 @@ use App\Models\Email;
 use App\Models\Mailbox;
 use App\Notifications\IncomingMailNotification;
 use App\Services\Calendar\IcsParser;
+use App\Support\AuthenticationResults;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -58,6 +59,7 @@ class StoreIncomingEmail implements ShouldQueue
             'cloudflare_account_id' => $account->id,
             'domain_id' => $domain?->id,
             'mailbox_id' => $mailbox?->id,
+            'from_mailbox_id' => $this->resolveSenderMailbox($p)?->id,
             'ingest_key' => $ingestKey,
             'message_id' => $messageId,
             'in_reply_to' => $p['in_reply_to'] ?? null,
@@ -109,6 +111,29 @@ class StoreIncomingEmail implements ShouldQueue
     protected function resolveMailbox(CloudflareAccount $account, ?string $toEmail): ?Mailbox
     {
         return $toEmail ? $account->mailboxes()->where('email', $toEmail)->first() : null;
+    }
+
+    /**
+     * The mailbox on this server that sent the message — so the recipient sees
+     * the sender's profile photo. Matched on the From header address, and only
+     * when Cloudflare verified that address's domain (DMARC pass): otherwise
+     * anyone could forge "From: ceo@…" and borrow the CEO's photo.
+     *
+     * @param  array<string, mixed>  $p
+     */
+    protected function resolveSenderMailbox(array $p): ?Mailbox
+    {
+        $from = strtolower(trim((string) $this->address($p['from'] ?? null)));
+        if (! str_contains($from, '@')) {
+            return null;
+        }
+
+        $domain = substr(strrchr($from, '@'), 1);
+        if (! AuthenticationResults::dmarcPassed($p['headers'] ?? null, $domain)) {
+            return null;
+        }
+
+        return Mailbox::query()->whereRaw('lower(email) = ?', [$from])->first();
     }
 
     /**

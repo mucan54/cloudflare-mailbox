@@ -59,6 +59,8 @@ svg { width: 100%; height: 100%; display: block; }
 .ava { display: grid; place-items: center; width: 32px; height: 32px; min-width: 32px; max-width: 32px; border-radius: 50%; color: #fff; font-weight: 600; font-size: 12px; line-height: 1; overflow: hidden; }
 .ava-sm { width: 34px; height: 34px; min-width: 34px; max-width: 34px; font-size: 13px; }
 .ava-lg { width: 44px; height: 44px; min-width: 44px; max-width: 44px; font-size: 16px; }
+/* Profile photo inside any avatar circle (falls back to the monogram). */
+.ava-img { width: 100%; height: 100%; display: block; border-radius: 50%; object-fit: cover; background: var(--panel-2); }
 .pill { background: var(--brand); color: #fff; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 0 7px; min-width: 18px; height: 16px; display: inline-grid; place-items: center; }
 
 /* ===== APP SHELL ===== */
@@ -546,5 +548,16 @@ svg { width: 100%; height: 100%; display: block; }
 .settings-actions .btn { text-decoration: none; }
 .set-area:focus { border-color: var(--brand); }
 .settings-actions { display: flex; justify-content: flex-end; margin-top: 4px; }
+.set-photo { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+.set-photo-ava { width: 72px; height: 72px; min-width: 72px; max-width: 72px; font-size: 26px; }
+.set-photo-meta { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.set-photo-title { font-size: 14px; font-weight: 600; }
+.set-photo-hint { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.set-photo-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.set-photo-actions .btn { height: 32px; padding: 0 12px; }
+.set-check { display: flex; align-items: flex-start; gap: 10px; margin: 2px 0 12px; font-size: 14px; cursor: pointer; }
+.set-check input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--brand); flex: none; }
+.set-check small { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); line-height: 1.4; }
+.set-check.disabled { opacity: .6; cursor: default; }
 .tb-menu-link { width: 100%; text-align: left; padding: 8px 6px; border-radius: 6px; font-size: 13px; color: var(--text); }
 .tb-menu-link:hover { background: var(--panel-2); }

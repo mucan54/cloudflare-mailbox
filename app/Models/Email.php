@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 class Email extends Model
 {
     protected $fillable = [
-        'cloudflare_account_id', 'domain_id', 'mailbox_id', 'ingest_key',
+        'cloudflare_account_id', 'domain_id', 'mailbox_id', 'from_mailbox_id', 'ingest_key',
         'message_id', 'in_reply_to', 'references', 'from_name', 'from_email',
         'to_email', 'cc', 'subject', 'text_body', 'html_body', 'headers',
         'raw_size', 'read_at', 'starred', 'folder', 'received_at',
@@ -40,6 +40,15 @@ class Email extends Model
     public function mailbox(): BelongsTo
     {
         return $this->belongsTo(Mailbox::class);
+    }
+
+    /**
+     * The mailbox on this server that sent the message (DMARC-verified at
+     * ingest), used to show the sender's profile photo.
+     */
+    public function fromMailbox(): BelongsTo
+    {
+        return $this->belongsTo(Mailbox::class, 'from_mailbox_id');
     }
 
     public function attachments(): MorphMany

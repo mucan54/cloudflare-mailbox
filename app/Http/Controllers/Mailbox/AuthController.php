@@ -54,9 +54,33 @@ class AuthController extends Controller
         $data = $request->validate([
             'display_name' => ['nullable', 'string', 'max:255'],
             'signature' => ['nullable', 'string', 'max:5000'],
+            'avatar_in_signature' => ['nullable', 'boolean'],
         ]);
 
         $request->user()->update($data);
+
+        return response()->json(['mailbox' => $this->present($request->user()->fresh())]);
+    }
+
+    /** Upload (or replace) the mailbox's profile photo. */
+    public function updateAvatar(Request $request): JsonResponse
+    {
+        $request->validate([
+            'avatar' => ['required', 'file', 'image', 'mimes:jpeg,png,gif,webp', 'max:5120'],
+        ]);
+
+        try {
+            $request->user()->setAvatar((string) $request->file('avatar')->get());
+        } catch (\InvalidArgumentException) {
+            throw ValidationException::withMessages(['avatar' => ['Bu resim kullanılamıyor (en fazla 4096×4096 piksel JPEG, PNG, GIF veya WebP).']]);
+        }
+
+        return response()->json(['mailbox' => $this->present($request->user()->fresh())]);
+    }
+
+    public function deleteAvatar(Request $request): JsonResponse
+    {
+        $request->user()->removeAvatar();
 
         return response()->json(['mailbox' => $this->present($request->user()->fresh())]);
     }
@@ -86,6 +110,8 @@ class AuthController extends Controller
             'email' => $mailbox->email,
             'display_name' => $mailbox->display_name,
             'signature' => $mailbox->signature,
+            'avatar_url' => $mailbox->avatarUrl(),
+            'avatar_in_signature' => (bool) $mailbox->avatar_in_signature,
             'unread' => $mailbox->emails()->whereNull('read_at')->count(),
             'calendar_feed_url' => url('/calendar/'.$mailbox->calendarToken().'.ics'),
         ];

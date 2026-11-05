@@ -25,7 +25,8 @@ class SendController extends Controller
 
         $sent = $query->paginate(min((int) $request->integer('per_page', 30), 100));
 
-        $sent->getCollection()->transform(fn (SentEmail $s) => $this->summary($s));
+        $avatarUrl = $request->user()->avatarUrl();
+        $sent->getCollection()->transform(fn (SentEmail $s) => $this->summary($s, $avatarUrl));
 
         return response()->json($sent);
     }
@@ -34,7 +35,7 @@ class SendController extends Controller
     {
         $model = $request->user()->sentEmails()->with('attachments')->findOrFail($sent);
 
-        return response()->json(['email' => array_merge($this->summary($model), [
+        return response()->json(['email' => array_merge($this->summary($model, $request->user()->avatarUrl()), [
             'cc' => $model->cc,
             'bcc' => $model->bcc,
             'html_body' => $model->html_body,
@@ -50,11 +51,12 @@ class SendController extends Controller
         ])]);
     }
 
-    private function summary(SentEmail $s): array
+    private function summary(SentEmail $s, ?string $avatarUrl = null): array
     {
         return [
             'id' => $s->id,
             'from_email' => $s->from_email,
+            'from_avatar_url' => $avatarUrl,
             'to' => $s->to,
             'to_email' => implode(', ', (array) $s->to),
             'subject' => $s->subject,

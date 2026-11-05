@@ -15,7 +15,7 @@ import { computed, inject, onActivated, onBeforeUnmount, onDeactivated, onMounte
 import { useRouter } from 'vue-router';
 import { useAuth } from '../stores/auth';
 import { useUi } from '../stores/ui';
-import { initials, avatarColor } from '../avatar';
+import { initials, avatarColor, avatarSrc, avatarFailed } from '../avatar';
 import { pushSupported, pushPermission, refreshPushPermission, requestAndSubscribe, vapidKey } from '../push';
 import { useIsDesktop } from '../useMedia';
 import { t, localeTag } from '../i18n';
@@ -63,9 +63,9 @@ const isTrash = computed(() => props.folder === 'trash');
 const paneMode = computed(() => isDesktop.value && ui.readingPane !== 'off');
 const greetName = computed(() => auth.current?.display_name || auth.current?.email?.split('@')[0] || '');
 const headerAvatar = computed(() => {
-    if (auth.isUnified) return { text: '∀', color: '#111827' };
+    if (auth.isUnified) return { text: '∀', color: '#111827', url: null };
     const a = auth.current;
-    return { text: initials(a?.display_name || a?.email), color: avatarColor(a?.email || '') };
+    return { text: initials(a?.display_name || a?.email), color: avatarColor(a?.email || ''), url: a?.avatar_url || null };
 });
 
 function keyOf(e) {
@@ -218,6 +218,10 @@ function who(e) {
 }
 function avatarSeed(e) {
     return typeOf(e) === 'sent' ? (e.to_email || '') : (e.from_email || '');
+}
+// Sender's profile photo — received mail only (sent rows show the recipient).
+function rowPhoto(e) {
+    return typeOf(e) === 'sent' ? null : avatarSrc(e.from_avatar_url);
 }
 function fmt(iso) {
     if (!iso) return '';
@@ -484,7 +488,8 @@ onBeforeUnmount(() => {
                     <h1 class="mb-title">{{ (props.folder === 'inbox' && !isDesktop) ? (greetName || title) : title }}</h1>
                 </div>
                 <button v-if="!isDesktop" class="mb-avatar" :style="{ background: headerAvatar.color }" :title="t('account.accounts')" @click="accountSheet.open()">
-                    {{ headerAvatar.text }}
+                    <img v-if="avatarSrc(headerAvatar.url)" :src="avatarSrc(headerAvatar.url)" alt="" class="ava-img" @error="avatarFailed(headerAvatar.url)" />
+                    <template v-else>{{ headerAvatar.text }}</template>
                 </button>
                 <button v-if="!isSent" class="mb-filter" :class="{ on: onlyUnread }" @click="onlyUnread = !onlyUnread">
                     {{ onlyUnread ? t('common.unread') : t('common.all') }}
@@ -542,7 +547,7 @@ onBeforeUnmount(() => {
                         @click="open(e)"
                     >
                         <button class="mb-check" :class="{ on: checked.has(keyOf(e)) }" @click.stop="toggleCheck(e)">
-                            <span class="mb-ava" :style="{ background: avatarColor(avatarSeed(e)) }">{{ initials(who(e)) }}</span>
+                            <span class="mb-ava" :style="{ background: avatarColor(avatarSeed(e)) }"><img v-if="rowPhoto(e)" :src="rowPhoto(e)" alt="" class="ava-img" loading="lazy" @error="avatarFailed(e.from_avatar_url)" /><template v-else>{{ initials(who(e)) }}</template></span>
                             <span class="mb-tick">✓</span>
                         </button>
                         <span class="mb-body">

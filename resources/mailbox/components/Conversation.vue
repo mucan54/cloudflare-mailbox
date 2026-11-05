@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '../stores/auth';
 import { useUi } from '../stores/ui';
-import { initials, avatarColor } from '../avatar';
+import { initials, avatarColor, avatarSrc, avatarFailed } from '../avatar';
 import { t, localeTag } from '../i18n';
 import MessageCard from './MessageCard.vue';
 
@@ -164,7 +164,7 @@ defineExpose({ reply, toggleStar, trash, markUnread });
                     </header>
                     <div class="cv-modal-scroll">
                         <div class="rd-sender">
-                            <span class="ava ava-lg" :style="{ background: avatarColor(modalMsg.from_email || '') }">{{ initials(avatarNameOf(modalMsg)) }}</span>
+                            <span class="ava ava-lg" :style="{ background: avatarColor(modalMsg.from_email || '') }"><img v-if="avatarSrc(modalMsg.from_avatar_url)" :src="avatarSrc(modalMsg.from_avatar_url)" alt="" class="ava-img" @error="avatarFailed(modalMsg.from_avatar_url)" /><template v-else>{{ initials(avatarNameOf(modalMsg)) }}</template></span>
                             <div class="rd-sender-meta">
                                 <div class="rd-name">{{ whoOf(modalMsg) }}</div>
                                 <div class="rd-email">{{ modalMsg.from_email }}</div>

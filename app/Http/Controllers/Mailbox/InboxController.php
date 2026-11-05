@@ -15,6 +15,9 @@ use Symfony\Component\Mime\Email as MimeEmail;
 
 class InboxController extends Controller
 {
+    /** Eager-load just what the sender's profile photo URL needs. */
+    private const SENDER = 'fromMailbox:id,avatar_path,avatar_token';
+
     /**
      * The full RFC822 message, rebuilt from the stored parts. Used by the
      * optional IMAP bridge (FETCH BODY[]) so native mail apps can render it.
@@ -56,7 +59,7 @@ class InboxController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $query = $request->user()->emails()->latest('received_at');
+        $query = $request->user()->emails()->with(self::SENDER)->latest('received_at');
 
         // Folder: inbox (default, excludes trash), starred, or trash.
         $folder = $request->string('folder')->toString() ?: 'inbox';
@@ -88,7 +91,7 @@ class InboxController extends Controller
 
     public function show(Request $request, int $email): JsonResponse
     {
-        $model = $request->user()->emails()->with('attachments')->findOrFail($email);
+        $model = $request->user()->emails()->with(['attachments', self::SENDER])->findOrFail($email);
 
         if (! $model->read_at) {
             $model->update(['read_at' => now()]);
@@ -114,7 +117,7 @@ class InboxController extends Controller
 
         $model->update($data);
 
-        return response()->json(['email' => $this->summary($model->fresh())]);
+        return response()->json(['email' => $this->summary($model->fresh(self::SENDER))]);
     }
 
     /**
@@ -142,7 +145,7 @@ class InboxController extends Controller
             ->filter(fn (Email $e) => $this->threadId($e) === $root)
             ->pluck('id');
 
-        $received = $user->emails()->with('attachments')->whereIn('id', $ids)->get();
+        $received = $user->emails()->with(['attachments', self::SENDER])->whereIn('id', $ids)->get();
 
         // Mark the whole conversation read as it's opened.
         $received->each(function (Email $e) {
@@ -163,7 +166,7 @@ class InboxController extends Controller
         $sent = $user->sentEmails()->with('attachments')->whereIn('id', $sentIds)->get();
 
         $messages = $received->map(fn (Email $e) => $this->threadItem($e))
-            ->concat($sent->map(fn (SentEmail $s) => $this->threadItemSent($s, $user->display_name, $user->email)))
+            ->concat($sent->map(fn (SentEmail $s) => $this->threadItemSent($s, $user->display_name, $user->email, $user->avatarUrl())))
             ->sortBy(fn (array $m) => $m['received_at'] ?? '')
             ->values();
 
@@ -202,7 +205,7 @@ class InboxController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function threadItemSent(SentEmail $s, ?string $fromName, string $fromEmail): array
+    private function threadItemSent(SentEmail $s, ?string $fromName, string $fromEmail, ?string $avatarUrl): array
     {
         return [
             'id' => $s->id,
@@ -210,6 +213,7 @@ class InboxController extends Controller
             'mine' => true,
             'from_email' => $s->from_email ?: $fromEmail,
             'from_name' => $fromName,
+            'from_avatar_url' => $avatarUrl,
             'to_email' => is_array($s->to) ? implode(', ', $s->to) : (string) $s->to,
             'cc' => $s->cc,
             'subject' => $s->subject,
@@ -234,6 +238,7 @@ class InboxController extends Controller
             'id' => $e->id,
             'from_email' => $e->from_email,
             'from_name' => $e->from_name,
+            'from_avatar_url' => $e->fromMailbox?->avatarUrl(),
             'subject' => $e->subject,
             'snippet' => Snippet::make($e->text_body, $e->html_body),
             'read' => $e->read_at !== null,

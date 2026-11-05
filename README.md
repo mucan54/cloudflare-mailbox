@@ -40,7 +40,9 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design.
   compose & sent log, inbox, inbound-Worker deploy.
 - **Mailbox portal** (`/`, Vue SPA + PWA): per-address login (email + password),
   native-feeling inbox, compose, and Web Push "new mail" notifications — installable
-  on Android & iOS.
+  on Android & iOS. Users can set a profile photo; it shows on mail they send to
+  other mailboxes on the server (DMARC-verified senders only) and, opt-in, next to
+  their signature for external recipients.
 - **Sending**: Cloudflare REST API (default) or SMTP, switchable via config.
 - **Receiving**: a Cloudflare **Email Worker** (`cf/`) parses inbound mail and posts
   it to a signed webhook; Laravel stores it and pushes a notification.
