@@ -56,5 +56,9 @@
     "You’re all set 🎉": "Her şey hazır 🎉",
     "Finish setting up your mail service": "Mail servisi kurulumunu tamamla",
     "steps completed": "adım tamamlandı",
-    "Go": "Git"
+    "Go": "Git",
+    "Profile photo": "Profil fotoğrafı",
+    "Shown in the mailbox app and on mail this address sends to people on this server.": "Mailbox uygulamasında ve bu adresin bu sunucudaki kişilere gönderdiği maillerde görünür.",
+    "This image can't be used (JPEG, PNG, GIF or WebP up to 4096×4096 px).": "Bu resim kullanılamıyor (en fazla 4096×4096 piksel JPEG, PNG, GIF veya WebP).",
+    "The photo could not be stored.": "Fotoğraf kaydedilemedi."
 }

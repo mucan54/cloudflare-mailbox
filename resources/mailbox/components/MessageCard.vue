@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue';
 import { useAuth } from '../stores/auth';
-import { initials, avatarColor } from '../avatar';
+import { initials, avatarColor, avatarSrc, avatarFailed } from '../avatar';
 import { t, localeTag } from '../i18n';
 
 const props = defineProps({
@@ -25,6 +25,7 @@ const hasQuote = ref(false);
 const who = computed(() => props.msg.mine ? t('mail.you') : (props.msg.from_name || props.msg.from_email || ''));
 const avatarName = computed(() => props.msg.from_name || props.msg.from_email || '?');
 const seed = computed(() => props.msg.from_email || '');
+const photo = computed(() => avatarSrc(props.msg.from_avatar_url));
 const toLine = computed(() => props.msg.to_email || '');
 
 // Sender/recipient details, toggled by tapping the name — so you can see WHO
@@ -187,7 +188,7 @@ defineExpose({ open });
 <template>
     <div class="msg" :class="{ open, collapsible }">
         <div class="msg-head" :class="{ tappable: collapsible }" @click="toggleOpen">
-            <span class="ava" :style="{ background: avatarColor(seed) }">{{ initials(avatarName) }}</span>
+            <span class="ava" :style="{ background: avatarColor(seed) }"><img v-if="photo" :src="photo" alt="" class="ava-img" @error="avatarFailed(msg.from_avatar_url)" /><template v-else>{{ initials(avatarName) }}</template></span>
             <span class="msg-hmeta">
                 <span class="msg-line1">
                     <button type="button" class="msg-who" :class="{ open: showDetails }" :title="t('mail.senderDetails')" @click.stop="toggleDetails">

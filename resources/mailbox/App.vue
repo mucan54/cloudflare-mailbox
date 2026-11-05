@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuth, UNIFIED } from './stores/auth';
 import { useUi } from './stores/ui';
-import { initials, avatarColor } from './avatar';
+import { initials, avatarColor, avatarSrc, avatarFailed } from './avatar';
 import { t, i18n, setLocale, AVAILABLE } from './i18n';
 import {
     enablePushIfGranted, pushPermission, pushSupported, refreshPushPermission, requestAndSubscribe, vapidKey,
@@ -243,7 +243,8 @@ onBeforeUnmount(() => {
                     </div>
                 </div>
                 <button class="tb-avatar" :style="{ background: auth.isUnified ? '#111827' : avatarColor(auth.current?.email || '') }" @click="sheetOpen = true">
-                    {{ auth.isUnified ? '∀' : initials(auth.current?.display_name || auth.current?.email) }}
+                    <img v-if="!auth.isUnified && avatarSrc(auth.current?.avatar_url)" :src="avatarSrc(auth.current?.avatar_url)" alt="" class="ava-img" @error="avatarFailed(auth.current?.avatar_url)" />
+                    <template v-else>{{ auth.isUnified ? '∀' : initials(auth.current?.display_name || auth.current?.email) }}</template>
                 </button>
             </div>
         </header>
@@ -278,7 +279,7 @@ onBeforeUnmount(() => {
                         <span v-if="auth.totalUnread" class="pill">{{ auth.totalUnread }}</span>
                     </button>
                     <button v-for="a in auth.accounts" :key="a.email" class="acct-row" :class="{ active: auth.active === a.email }" @click="pickAccount(a.email)">
-                        <span class="ava ava-sm" :style="{ background: avatarColor(a.email) }">{{ initials(a.display_name || a.email) }}</span>
+                        <span class="ava ava-sm" :style="{ background: avatarColor(a.email) }"><img v-if="avatarSrc(a.avatar_url)" :src="avatarSrc(a.avatar_url)" alt="" class="ava-img" @error="avatarFailed(a.avatar_url)" /><template v-else>{{ initials(a.display_name || a.email) }}</template></span>
                         <span class="acct-meta"><b>{{ a.display_name || a.email }}</b><small>{{ a.email }}</small></span>
                         <span v-if="a.unread" class="pill">{{ a.unread }}</span>
                     </button>
@@ -334,7 +335,7 @@ onBeforeUnmount(() => {
                     </button>
                     <div v-for="a in auth.accounts" :key="a.email" class="acct-row" :class="{ active: auth.active === a.email }">
                         <button class="acct-pick" @click="pickAccount(a.email)">
-                            <span class="ava ava-sm" :style="{ background: avatarColor(a.email) }">{{ initials(a.display_name || a.email) }}</span>
+                            <span class="ava ava-sm" :style="{ background: avatarColor(a.email) }"><img v-if="avatarSrc(a.avatar_url)" :src="avatarSrc(a.avatar_url)" alt="" class="ava-img" @error="avatarFailed(a.avatar_url)" /><template v-else>{{ initials(a.display_name || a.email) }}</template></span>
                             <span class="acct-meta"><b>{{ a.display_name || a.email }}</b><small>{{ a.email }}</small></span>
                         </button>
                         <button class="acct-edit" :title="t('profile.edit')" @click="openSettings(a.email)">

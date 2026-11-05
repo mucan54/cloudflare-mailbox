@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Profile photos
+- Mailbox users can upload a profile photo in Profile & settings (admins can
+  set one on the mailbox form too). Photos are centre-cropped to a 256 px JPEG
+  in the browser and again on the server, which also applies the EXIF
+  orientation and strips metadata (GPS etc.).
+- The photo replaces the initials avatar in the portal: top bar, account list,
+  your own messages in Sent and in conversations.
+- Mail from another mailbox on this server shows the sender's photo in the
+  inbox list and in the conversation, but only when Cloudflare verified the
+  From domain (`Authentication-Results: mx.cloudflare.net; … dmarc=pass`).
+  A forged From never gets someone else's photo.
+- Optional "show my photo next to my signature": outgoing HTML mail gets the
+  signature as a small card with the photo, so Gmail, Outlook and other
+  external recipients see it too. The photo is served from
+  `/avatars/{token}`, a public, unguessable URL that stays the same when the
+  photo changes.
+- New optional `CLOUDFLARE_AVATARS_DISK` (defaults to the attachments disk).
+
 ## v0.0 — "First Flight" (İlk Uçuş)
 
 The first tagged release of the Cloudflare Mailbox — a multi-tenant web mail

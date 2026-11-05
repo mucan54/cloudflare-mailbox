@@ -1,11 +1,16 @@
 <?php
 
 use App\Http\Controllers\AutodiscoverController;
+use App\Http\Controllers\AvatarController;
 use App\Http\Controllers\CalendarFeedController;
 use App\Http\Controllers\DavController;
 use App\Http\Controllers\IncomingEmailController;
 use App\Http\Controllers\MobileConfigController;
+use App\Http\Middleware\SetLocale;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 // Inbound Email Worker -> Laravel webhook (HMAC-authenticated, CSRF-exempt).
 Route::post('/api/cf/incoming', IncomingEmailController::class)
@@ -14,6 +19,14 @@ Route::post('/api/cf/incoming', IncomingEmailController::class)
 // Read-only calendar subscription feed (Apple/Google Calendar). Token-authed.
 Route::get('/calendar/{token}.ics', CalendarFeedController::class)
     ->where('token', '[A-Za-z0-9]+');
+
+// Public profile photos (portal + opt-in email signatures). Token-addressed;
+// stateless, so no session/cookie work for what is just an image. No file
+// extension on purpose: nginx's static-asset rule would claim *.jpg paths
+// before they reach Laravel.
+Route::get('/avatars/{token}', AvatarController::class)
+    ->where('token', '[A-Za-z0-9]+')
+    ->withoutMiddleware([StartSession::class, ShareErrorsFromSession::class, PreventRequestForgery::class, SetLocale::class]);
 
 // Mail-client auto-configuration (optional native-mail feature). Defined before
 // the SPA catch-all so these exact paths win; the SPA's /mail/{id} still works.
@@ -52,4 +65,4 @@ Route::get('/locale/{locale}', function (string $locale) {
 // Mailbox portal — the Vue SPA (PWA). Everything not owned by the admin panel,
 // the API, Livewire, static assets, or health is handled client-side.
 Route::view('/{any?}', 'mailbox')
-    ->where('any', '^(?!admin|api|livewire|build|storage|up|locale|calendar|sw\.js|manifest\.webmanifest|icons|favicon).*$');
+    ->where('any', '^(?!admin|api|livewire|build|storage|up|locale|calendar|avatars|sw\.js|manifest\.webmanifest|icons|favicon).*$');

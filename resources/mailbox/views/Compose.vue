@@ -156,9 +156,58 @@ function quote(o) {
         + (o.text_body || (o.html_body ? o.html_body.replace(/<[^>]+>/g, '') : ''));
 }
 
+// The signature text compose inserts for an account. With "photo in
+// signature" on but no signature written, the display name stands in so the
+// photo has something to sit next to.
+function sigText(email) {
+    const a = auth.accountByEmail(email);
+    if (!a) return '';
+    if (a.signature) return a.signature;
+    return a.avatar_in_signature && a.avatar_url ? (a.display_name || a.email) : '';
+}
 function sigBlock(email) {
-    const s = auth.accountByEmail(email)?.signature || '';
+    const s = sigText(email);
     return s ? `\n\n${s}` : '';
+}
+
+// ----- plain text → HTML part -----
+// Render the plain-text separator line as a real <hr> in the HTML part.
+function linesHtml(text) {
+    return text.split('\n').map((line) => (/^_{10,}\s*$/.test(line) ? '<hr>' : line)).join('<br>');
+}
+function escAttr(v) {
+    return String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+// The signature as a small card with the sender's photo. Table layout + inline
+// styles: the only markup every mail client (Gmail, Outlook, Apple Mail)
+// renders the same way.
+function sigCardHtml(acc, sig) {
+    return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse"><tr>'
+        + `<td style="padding:0 12px 0 0;vertical-align:top"><img src="${escAttr(acc.avatar_url)}" width="56" height="56" alt="${escAttr(acc.display_name || acc.email)}" style="display:block;width:56px;height:56px;border:0;border-radius:50%"></td>`
+        + `<td style="vertical-align:middle">${linesHtml(sig)}</td>`
+        + '</tr></table>';
+}
+// Where the signature compose inserted sits: an occurrence on its own lines
+// (not inside a sentence the user typed), the last one above the quoted
+// original. -1 when the user removed it.
+function sigIndex(text, sig) {
+    const quoteAt = text.search(/^_{10,}\s*$/m);
+    const limit = quoteAt < 0 ? text.length : quoteAt;
+    let found = -1;
+    for (let i = text.indexOf(sig); i >= 0 && i + sig.length <= limit; i = text.indexOf(sig, i + 1)) {
+        const end = i + sig.length;
+        if ((i === 0 || text[i - 1] === '\n') && (end === text.length || text[end] === '\n')) found = i;
+    }
+    return found;
+}
+function bodyHtml() {
+    const text = body.value;
+    const acc = auth.accountByEmail(from.value);
+    const sig = sigText(from.value);
+    const at = acc?.avatar_in_signature && acc?.avatar_url && sig ? sigIndex(text, sig) : -1;
+    if (at < 0) return '<div>' + linesHtml(text) + '</div>';
+    const rest = text.slice(at + sig.length).replace(/^\n/, ''); // the table already ends the line
+    return '<div>' + linesHtml(text.slice(0, at)) + sigCardHtml(acc, sig) + linesHtml(rest) + '</div>';
 }
 
 onMounted(async () => {
@@ -205,10 +254,7 @@ async function send() {
     }
     busy.value = true;
     try {
-        // Render the plain-text separator line as a real <hr> in the HTML part.
-        const html = '<div>'
-            + body.value.split('\n').map((line) => (/^_{10,}\s*$/.test(line) ? '<hr>' : line)).join('<br>')
-            + '</div>';
+        const html = bodyHtml();
         await auth.api(from.value).post('/send', {
             to: to.value,
             cc: cc.value,

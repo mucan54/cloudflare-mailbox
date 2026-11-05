@@ -20,7 +20,7 @@ function loadAccounts() {
  */
 export const useAuth = defineStore('auth', {
     state: () => ({
-        accounts: loadAccounts(), // [{ email, token, display_name, unread }]
+        accounts: loadAccounts(), // [{ email, token, display_name, avatar_url, unread }]
         active: localStorage.getItem(ACTIVE_KEY) || null,
     }),
 
@@ -47,6 +47,8 @@ export const useAuth = defineStore('auth', {
                 token: data.token,
                 display_name: data.mailbox.display_name,
                 signature: data.mailbox.signature || '',
+                avatar_url: data.mailbox.avatar_url || null,
+                avatar_in_signature: !!data.mailbox.avatar_in_signature,
                 calendar_feed_url: data.mailbox.calendar_feed_url || '',
                 unread: data.mailbox.unread || 0,
             };
@@ -90,8 +92,7 @@ export const useAuth = defineStore('auth', {
                     try {
                         const { data } = await apiFor(a.token).get('/me');
                         a.unread = data.mailbox.unread || 0;
-                        a.display_name = data.mailbox.display_name;
-                        a.signature = data.mailbox.signature || '';
+                        this.applyProfile(a, data.mailbox);
                     } catch (e) {
                         if (e.response?.status === 401) {
                             this.removeByEmail(a.email);
@@ -110,12 +111,38 @@ export const useAuth = defineStore('auth', {
             this.persist();
         },
 
+        /** Copy the profile fields of a /me-style mailbox payload onto an account. */
+        applyProfile(acc, mailbox) {
+            acc.display_name = mailbox.display_name;
+            acc.signature = mailbox.signature || '';
+            acc.avatar_url = mailbox.avatar_url || null;
+            acc.avatar_in_signature = !!mailbox.avatar_in_signature;
+        },
+
         async updateProfile(email, payload) {
             const acc = this.accountByEmail(email);
             if (!acc) return;
             const { data } = await apiFor(acc.token).put('/me', payload);
-            acc.display_name = data.mailbox.display_name;
-            acc.signature = data.mailbox.signature || '';
+            this.applyProfile(acc, data.mailbox);
+            this.persist();
+        },
+
+        /** Upload a new profile photo (a File/Blob) for an account. */
+        async uploadAvatar(email, file) {
+            const acc = this.accountByEmail(email);
+            if (!acc) return;
+            const form = new FormData();
+            form.append('avatar', file, file.name || 'avatar.jpg');
+            const { data } = await apiFor(acc.token).post('/me/avatar', form);
+            this.applyProfile(acc, data.mailbox);
+            this.persist();
+        },
+
+        async removeAvatar(email) {
+            const acc = this.accountByEmail(email);
+            if (!acc) return;
+            const { data } = await apiFor(acc.token).delete('/me/avatar');
+            this.applyProfile(acc, data.mailbox);
             this.persist();
         },
 

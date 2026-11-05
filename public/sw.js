@@ -7,7 +7,7 @@ const SHELL = '/';
 // panel, Livewire, and the routes in routes/web.php that sit outside the SPA
 // catch-all (mirror its exclusions). Serving the shell for these breaks them —
 // e.g. after an admin login, /admin would keep showing the cached login page.
-const SERVER_PAGES = /^\/(admin|api|livewire|build|storage|up|locale|calendar|dav|autodiscover|\.well-known|mail\/config-v1\.1\.xml|mail\/profile\/)/i;
+const SERVER_PAGES = /^\/(admin|api|livewire|build|storage|up|locale|calendar|avatars|dav|autodiscover|\.well-known|mail\/config-v1\.1\.xml|mail\/profile\/)/i;
 
 // Shown ONLY when a navigation has neither network nor a cached shell: a
 // spinner that reloads itself, so a cold/evicted PWA on a momentarily dead
