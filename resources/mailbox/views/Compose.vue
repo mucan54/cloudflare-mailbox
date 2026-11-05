@@ -230,7 +230,9 @@ onMounted(async () => {
     const sig = sigBlock(from.value);
 
     if (mode === 'reply' || mode === 'replyAll') {
-        if (orig.from_email) to.value = [orig.from_email];
+        // Reply-To wins over From, as in every mail client.
+        if (orig.reply_to?.length) to.value = [...orig.reply_to];
+        else if (orig.from_email) to.value = [orig.from_email];
         subject.value = `Re: ${stripPrefix(orig.subject)}`;
         if (mode === 'replyAll' && orig.cc?.length) {
             cc.value = orig.cc.filter((a) => a !== from.value);

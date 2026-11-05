@@ -65,7 +65,7 @@ class StoreIncomingEmail implements ShouldQueue
             'in_reply_to' => $p['in_reply_to'] ?? null,
             'references' => $this->arr($p['references'] ?? []),
             'from_name' => $this->name($p['from'] ?? null),
-            'from_email' => $this->address($p['envelope_from'] ?? $p['from'] ?? null),
+            'from_email' => $this->senderAddress($p),
             'to_email' => $toEmail,
             'cc' => $this->addresses($p['cc'] ?? []),
             'subject' => $p['subject'] ?? null,
@@ -111,6 +111,28 @@ class StoreIncomingEmail implements ShouldQueue
     protected function resolveMailbox(CloudflareAccount $account, ?string $toEmail): ?Mailbox
     {
         return $toEmail ? $account->mailboxes()->where('email', $toEmail)->first() : null;
+    }
+
+    /**
+     * The sender as every mail client shows it: the From header address. The
+     * envelope sender (SMTP MAIL FROM / Return-Path) is only a fallback for a
+     * missing or unusable From — senders that handle their own bounces put a
+     * bounce address there (Cloudflare Email Sending uses …@cf-bounce.<domain>,
+     * as do SES, SendGrid, Mailchimp…), which is neither who sent the mail nor
+     * where a reply should go.
+     *
+     * @param  array<string, mixed>  $p
+     */
+    protected function senderAddress(array $p): ?string
+    {
+        foreach ([$p['from'] ?? null, $p['envelope_from'] ?? null] as $candidate) {
+            $address = trim((string) $this->address($candidate));
+            if (preg_match('/^[^@\s<>]+@[^@\s<>]+$/', $address)) {
+                return $address;
+            }
+        }
+
+        return null;
     }
 
     /**

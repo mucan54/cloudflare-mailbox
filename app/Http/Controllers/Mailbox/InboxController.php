@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Mailbox;
 use App\Http\Controllers\Controller;
 use App\Models\Email;
 use App\Models\SentEmail;
+use App\Support\MailHeaders;
 use App\Support\Snippet;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -253,6 +254,9 @@ class InboxController extends Controller
     {
         return array_merge($this->summary($e), [
             'to_email' => $e->to_email,
+            // Where a reply should go when the sender asked for it (mailing
+            // lists, no-reply senders, help desks). Empty = reply to From.
+            'reply_to' => MailHeaders::addresses(MailHeaders::first($e->headers, 'reply-to')),
             'cc' => $e->cc,
             'html_body' => $e->html_body,
             'text_body' => $e->text_body,
