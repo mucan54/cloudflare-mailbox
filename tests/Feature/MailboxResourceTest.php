@@ -90,4 +90,24 @@ class MailboxResourceTest extends TestCase
 
         $this->get("/admin/{$account->slug}/mailboxes")->assertSuccessful()->assertSee('/avatars/'.$mailbox->avatar_token, false);
     }
+
+    public function test_an_unusable_admin_photo_is_a_field_error_not_a_crash(): void
+    {
+        Storage::fake('local');
+        config(['cloudflare.attachments_disk' => 'local', 'cloudflare.avatars_disk' => null]);
+        $account = $this->boot();
+
+        Livewire::test(CreateMailbox::class)
+            ->fillForm([
+                // Square, so it passes the 1:1 rule, but too large to decode.
+                'avatar_path' => UploadedFile::fake()->image('huge.png', 4200, 4200),
+                'domain_id' => $account->domains()->first()->id,
+                'local_part' => 'big',
+                'password' => 'password123',
+            ])
+            ->call('create')
+            ->assertHasFormErrors(['avatar_path']);
+
+        $this->assertNull(Mailbox::where('email', 'big@a.com')->first());
+    }
 }

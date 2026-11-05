@@ -14,6 +14,8 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class MailboxForm
@@ -30,10 +32,21 @@ class MailboxForm
                 ->maxSize(5120)
                 // Same pipeline as the portal upload: square, 256 px JPEG,
                 // metadata stripped. The model removes the replaced file.
-                ->saveUploadedFileUsing(function (TemporaryUploadedFile $file): string {
-                    [$bytes, $ext] = AvatarImage::normalize($file->get());
+                ->saveUploadedFileUsing(function (FileUpload $component, TemporaryUploadedFile $file): string {
+                    try {
+                        [$bytes, $ext] = AvatarImage::normalize((string) $file->get());
+                    } catch (InvalidArgumentException) {
+                        throw ValidationException::withMessages([
+                            $component->getStatePath() => __('This image can\'t be used (JPEG, PNG, GIF or WebP up to 4096×4096 px).'),
+                        ]);
+                    }
+
                     $path = 'avatars/'.Str::random(24).'.'.$ext;
-                    Storage::disk(Mailbox::avatarDisk())->put($path, $bytes);
+                    if (! Storage::disk(Mailbox::avatarDisk())->put($path, $bytes)) {
+                        throw ValidationException::withMessages([
+                            $component->getStatePath() => __('The photo could not be stored.'),
+                        ]);
+                    }
 
                     return $path;
                 })

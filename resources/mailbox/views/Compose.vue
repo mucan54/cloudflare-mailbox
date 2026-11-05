@@ -187,12 +187,24 @@ function sigCardHtml(acc, sig) {
         + `<td style="vertical-align:middle">${linesHtml(sig)}</td>`
         + '</tr></table>';
 }
+// Where the signature compose inserted sits: an occurrence on its own lines
+// (not inside a sentence the user typed), the last one above the quoted
+// original. -1 when the user removed it.
+function sigIndex(text, sig) {
+    const quoteAt = text.search(/^_{10,}\s*$/m);
+    const limit = quoteAt < 0 ? text.length : quoteAt;
+    let found = -1;
+    for (let i = text.indexOf(sig); i >= 0 && i + sig.length <= limit; i = text.indexOf(sig, i + 1)) {
+        const end = i + sig.length;
+        if ((i === 0 || text[i - 1] === '\n') && (end === text.length || text[end] === '\n')) found = i;
+    }
+    return found;
+}
 function bodyHtml() {
     const text = body.value;
     const acc = auth.accountByEmail(from.value);
     const sig = sigText(from.value);
-    // The first occurrence is the signature compose inserted (above any quote).
-    const at = acc?.avatar_in_signature && acc?.avatar_url && sig ? text.indexOf(sig) : -1;
+    const at = acc?.avatar_in_signature && acc?.avatar_url && sig ? sigIndex(text, sig) : -1;
     if (at < 0) return '<div>' + linesHtml(text) + '</div>';
     const rest = text.slice(at + sig.length).replace(/^\n/, ''); // the table already ends the line
     return '<div>' + linesHtml(text.slice(0, at)) + sigCardHtml(acc, sig) + linesHtml(rest) + '</div>';

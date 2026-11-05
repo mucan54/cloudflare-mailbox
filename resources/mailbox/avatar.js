@@ -35,6 +35,15 @@ export function avatarFailed(url) {
     if (url) broken.add(url);
 }
 
+// A failure may only be the network waking up (e.g. a resumed PWA): retry the
+// photos once it is back or the app is brought to the foreground again.
+if (typeof window !== 'undefined') {
+    window.addEventListener('online', () => broken.clear());
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') broken.clear();
+    });
+}
+
 /**
  * Centre-crop a picked image to a square JPEG (≤ size px) in the browser, so a
  * 10 MB phone photo uploads as a few dozen KB. Browsers apply the EXIF

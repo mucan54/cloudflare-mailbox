@@ -17,6 +17,10 @@ class AuthenticationResultsTest extends TestCase
             ['Authentication-Results' => 'mx.cloudflare.net; dmarc=pass (p=reject dis=none) header.from=a.com'],
             'a.com',
         ));
+        // name => [values]: the first value is Cloudflare's
+        $this->assertTrue(AuthenticationResults::dmarcPassed(
+            ['authentication-results' => ['mx.cloudflare.net; dmarc=pass', 'mx.evil.com; dmarc=fail']],
+        ));
     }
 
     public function test_anything_else_is_not(): void

@@ -72,10 +72,12 @@ class AuthenticationResults
         }
 
         foreach ($headers as $key => $entry) {
-            if (is_array($entry) && array_is_list($entry) && count($entry) === 2 && is_string($entry[0])) {
-                [$name, $value] = $entry;          // [[name, value], ...]
+            if (is_string($key)) {
+                [$name, $value] = [$key, $entry];  // [name => value | [values]]
+            } elseif (is_array($entry) && array_is_list($entry) && count($entry) === 2) {
+                [$name, $value] = $entry;          // [[name, value], ...] (the Worker's shape)
             } else {
-                [$name, $value] = [$key, $entry];  // [name => value]
+                continue;
             }
 
             if (is_string($name) && strcasecmp($name, 'authentication-results') === 0) {

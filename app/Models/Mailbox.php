@@ -40,6 +40,10 @@ class Mailbox extends Authenticatable implements AuthenticatableContract
      * Public URL of the profile photo, or null when none is set. The token part
      * is stable for the mailbox (links in already-sent mail keep working); the
      * ?v= part changes with every new photo so browsers fetch the new one.
+     *
+     * Built from APP_URL, not the current request's host: the same URL goes
+     * into outgoing signatures, where it must be the public address even if
+     * the user happens to browse the portal via an internal host or IP.
      */
     public function avatarUrl(): ?string
     {
@@ -47,7 +51,9 @@ class Mailbox extends Authenticatable implements AuthenticatableContract
             return null;
         }
 
-        return url('/avatars/'.$this->avatar_token).'?v='.substr(md5($this->avatar_path), 0, 10);
+        $base = rtrim((string) config('app.url'), '/') ?: url('/');
+
+        return $base.'/avatars/'.$this->avatar_token.'?v='.substr(md5($this->avatar_path), 0, 10);
     }
 
     /**

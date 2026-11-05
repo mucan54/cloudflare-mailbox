@@ -133,7 +133,9 @@ class StoreIncomingEmail implements ShouldQueue
             return null;
         }
 
-        return Mailbox::query()->whereRaw('lower(email) = ?', [$from])->first();
+        // Addresses are stored lowercase (the admin form lowercases them), so
+        // an exact match can use the unique index.
+        return Mailbox::where('email', $from)->first();
     }
 
     /**

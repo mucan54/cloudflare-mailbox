@@ -63,7 +63,8 @@ class MailboxAvatarTest extends TestCase
         $this->assertSame([256, 256, IMAGETYPE_JPEG], [$w, $h, $type]);
 
         $url = $res->json('mailbox.avatar_url');
-        $this->assertStringContainsString('/avatars/'.$mailbox->avatar_token.'?v=', $url);
+        // Built from APP_URL so the same link works in outgoing signatures.
+        $this->assertStringStartsWith(rtrim(config('app.url'), '/').'/avatars/'.$mailbox->avatar_token.'?v=', $url);
         $this->getJson('/api/mailbox/me')->assertJsonPath('mailbox.avatar_url', $url);
     }
 
@@ -102,7 +103,10 @@ class MailboxAvatarTest extends TestCase
             ->assertJsonPath('mailbox.avatar_url', null)
             ->assertJsonPath('mailbox.avatar_in_signature', false);
         Storage::disk('local')->assertMissing($second);
-        $this->get('/avatars/'.$token)->assertNotFound();
+
+        // Already-sent signatures keep pointing here: an empty image, not a 404.
+        $res = $this->get('/avatars/'.$token)->assertOk();
+        $this->assertSame('image/gif', $res->headers->get('Content-Type'));
     }
 
     public function test_deleting_the_mailbox_deletes_its_photo(): void
