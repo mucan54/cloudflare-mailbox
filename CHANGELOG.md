@@ -29,6 +29,8 @@
   the sender of already-stored mail from its saved headers. In the same pass
   it links DMARC-verified senders on this server, so older mail shows their
   profile photo too.
+- "Reply" goes to the Reply-To address when the sender set one (mailing lists,
+  no-reply senders, help desks), as in every mail client.
 
 ## v0.0 — "First Flight" (İlk Uçuş)
 

@@ -38,6 +38,26 @@ class MailHeaders
     }
 
     /**
+     * Every mailbox address in an address-list header value (Reply-To, Cc, …).
+     *
+     * @return array<int, string>
+     */
+    public static function addresses(?string $value): array
+    {
+        if ($value === null || trim($value) === '') {
+            return [];
+        }
+
+        // Quoted display names and comments may contain commas and "@".
+        $clean = preg_replace('/"(?:[^"\\\\]|\\\\.)*"|\([^()]*\)/', ' ', $value) ?? $value;
+
+        return array_values(array_filter(array_map(
+            fn (string $part) => self::address($part),
+            explode(',', $clean),
+        )));
+    }
+
+    /**
      * The (first) mailbox address in an address header value such as
      * `"Ada Lovelace" <ada@acme.com>`, `=?UTF-8?B?…?= <ada@acme.com>` or a
      * bare `ada@acme.com`. Null when there is none.

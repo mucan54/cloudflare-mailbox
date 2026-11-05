@@ -92,6 +92,20 @@ class IncomingEmailTest extends TestCase
         $this->assertDatabaseHas('emails', ['message_id' => '<nofrom@x.com>', 'from_email' => 'robot@x.com']);
     }
 
+    public function test_a_malformed_from_falls_back_to_the_envelope(): void
+    {
+        $account = $this->account();
+        $account->domains()->create(['zone_id' => 'z1', 'name' => 'a.com']);
+
+        $this->postWebhook($account, $this->payload([
+            'message_id' => '<bad@x.com>',
+            'envelope_from' => 'robot@x.com',
+            'from' => ['address' => 'foo@', 'name' => ''],
+        ]))->assertStatus(202);
+
+        $this->assertDatabaseHas('emails', ['message_id' => '<bad@x.com>', 'from_email' => 'robot@x.com']);
+    }
+
     public function test_mailbox_is_resolved_by_recipient(): void
     {
         $account = $this->account();

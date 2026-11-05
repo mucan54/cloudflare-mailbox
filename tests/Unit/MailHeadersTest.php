@@ -17,6 +17,16 @@ class MailHeadersTest extends TestCase
         $this->assertNull(MailHeaders::first(null, 'from'));
     }
 
+    public function test_addresses_reads_a_list(): void
+    {
+        $this->assertSame(
+            ['j@x.com', 'b@y.com'],
+            MailHeaders::addresses('"Smith, John" <j@x.com>, b@y.com (Bob, Jr)'),
+        );
+        $this->assertSame([], MailHeaders::addresses(null));
+        $this->assertSame([], MailHeaders::addresses('undisclosed-recipients:;'));
+    }
+
     public function test_address_extracts_the_mailbox(): void
     {
         $this->assertSame('ada@a.com', MailHeaders::address('"Ada Lovelace" <ada@a.com>'));

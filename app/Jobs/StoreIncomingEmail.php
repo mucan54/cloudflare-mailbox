@@ -127,7 +127,7 @@ class StoreIncomingEmail implements ShouldQueue
     {
         foreach ([$p['from'] ?? null, $p['envelope_from'] ?? null] as $candidate) {
             $address = trim((string) $this->address($candidate));
-            if (str_contains($address, '@')) {
+            if (preg_match('/^[^@\s<>]+@[^@\s<>]+$/', $address)) {
                 return $address;
             }
         }

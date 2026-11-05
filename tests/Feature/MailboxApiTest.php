@@ -473,4 +473,23 @@ class MailboxApiTest extends TestCase
 
         Notification::assertSentTo($mailbox, IncomingMailNotification::class);
     }
+
+    public function test_detail_exposes_reply_to_for_replies(): void
+    {
+        $mailbox = $this->mailbox();
+        $email = $mailbox->emails()->create([
+            'cloudflare_account_id' => $mailbox->cloudflare_account_id, 'ingest_key' => 'rt',
+            'from_email' => 'noreply@desk.com', 'subject' => 'Ticket', 'received_at' => now(),
+            'headers' => [['from', 'Desk <noreply@desk.com>'], ['reply-to', '"Support, Desk" <ticket-42@desk.com>']],
+        ]);
+        $plain = $mailbox->emails()->create([
+            'cloudflare_account_id' => $mailbox->cloudflare_account_id, 'ingest_key' => 'rt2',
+            'from_email' => 'a@b.com', 'subject' => 'Hi', 'received_at' => now(),
+        ]);
+
+        Sanctum::actingAs($mailbox);
+
+        $this->getJson("/api/mailbox/emails/{$email->id}")->assertJsonPath('email.reply_to', ['ticket-42@desk.com']);
+        $this->getJson("/api/mailbox/emails/{$plain->id}")->assertJsonPath('email.reply_to', []);
+    }
 }
