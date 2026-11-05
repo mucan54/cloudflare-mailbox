@@ -20,6 +20,16 @@
   photo changes.
 - New optional `CLOUDFLARE_AVATARS_DISK` (defaults to the attachments disk).
 
+### Fixes
+- Incoming mail now records the sender from the From header instead of the
+  envelope sender (MAIL FROM). Cloudflare Email Sending and most bulk senders
+  put a bounce address there (`…@cf-bounce.<domain>`), which showed up as the
+  sender, received replies, and was suggested as a recipient. The envelope
+  sender is only used when the From header is missing. A migration re-derives
+  the sender of already-stored mail from its saved headers. In the same pass
+  it links DMARC-verified senders on this server, so older mail shows their
+  profile photo too.
+
 ## v0.0 — "First Flight" (İlk Uçuş)
 
 The first tagged release of the Cloudflare Mailbox — a multi-tenant web mail

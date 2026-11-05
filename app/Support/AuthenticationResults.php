@@ -23,7 +23,7 @@ class AuthenticationResults
      */
     public static function dmarcPassed(mixed $headers, ?string $fromDomain = null): bool
     {
-        $value = self::first($headers);
+        $value = MailHeaders::first($headers, 'authentication-results');
         if ($value === null) {
             return false;
         }
@@ -62,31 +62,5 @@ class AuthenticationResults
 
         // At least one DMARC result, and every one of them a pass.
         return $verdicts !== [] && ! in_array(false, $verdicts, true);
-    }
-
-    /** The value of the first Authentication-Results header, if any. */
-    private static function first(mixed $headers): ?string
-    {
-        if (! is_array($headers)) {
-            return null;
-        }
-
-        foreach ($headers as $key => $entry) {
-            if (is_string($key)) {
-                [$name, $value] = [$key, $entry];  // [name => value | [values]]
-            } elseif (is_array($entry) && array_is_list($entry) && count($entry) === 2) {
-                [$name, $value] = $entry;          // [[name, value], ...] (the Worker's shape)
-            } else {
-                continue;
-            }
-
-            if (is_string($name) && strcasecmp($name, 'authentication-results') === 0) {
-                $value = is_array($value) ? reset($value) : $value;
-
-                return is_string($value) ? $value : null;
-            }
-        }
-
-        return null;
     }
 }

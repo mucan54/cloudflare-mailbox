@@ -63,6 +63,35 @@ class IncomingEmailTest extends TestCase
         ]);
     }
 
+    public function test_sender_is_the_from_header_not_the_bounce_envelope(): void
+    {
+        $account = $this->account();
+        $account->domains()->create(['zone_id' => 'z1', 'name' => 'a.com']);
+
+        // Cloudflare Email Sending (and most bulk senders) put a bounce
+        // address in MAIL FROM; the person is in the From header.
+        $this->postWebhook($account, $this->payload([
+            'envelope_from' => 'bounce-123@cf-bounce.acme.com',
+            'from' => ['address' => 'ada@acme.com', 'name' => 'Ada'],
+        ]))->assertStatus(202);
+
+        $this->assertDatabaseHas('emails', ['from_email' => 'ada@acme.com', 'from_name' => 'Ada']);
+    }
+
+    public function test_envelope_sender_is_the_fallback_without_a_from_header(): void
+    {
+        $account = $this->account();
+        $account->domains()->create(['zone_id' => 'z1', 'name' => 'a.com']);
+
+        $this->postWebhook($account, $this->payload([
+            'message_id' => '<nofrom@x.com>',
+            'envelope_from' => 'robot@x.com',
+            'from' => ['address' => '', 'name' => ''],
+        ]))->assertStatus(202);
+
+        $this->assertDatabaseHas('emails', ['message_id' => '<nofrom@x.com>', 'from_email' => 'robot@x.com']);
+    }
+
     public function test_mailbox_is_resolved_by_recipient(): void
     {
         $account = $this->account();
