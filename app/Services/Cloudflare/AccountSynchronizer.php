@@ -54,29 +54,79 @@ class AccountSynchronizer
         $count = 0;
 
         foreach ($zones as $zone) {
-            $routingEnabled = false;
+            $zoneId = (string) $zone['id'];
+            $attributes = [
+                'name' => $zone['name'] ?? '',
+                'status' => $zone['status'] ?? null,
+                'routing_enabled' => $this->routingEnabled($zoneId),
+                'last_synced_at' => now(),
+            ];
 
-            try {
-                $routing = $this->client()->getRoutingSettings($zone['id']);
-                $routingEnabled = ($routing['enabled'] ?? false) === true
-                    || ($routing['status'] ?? null) === 'ready';
-            } catch (CloudflareException) {
-                // Routing not enabled for this zone yet — leave as false.
+            // Null means the sending API could not be read. Leave the stored
+            // flag alone so a 403 does not flip a working domain back to off.
+            $sendingEnabled = $this->sendingEnabled($zoneId);
+            if ($sendingEnabled !== null) {
+                $attributes['sending_enabled'] = $sendingEnabled;
             }
 
             $this->account->domains()->updateOrCreate(
-                ['zone_id' => $zone['id']],
-                [
-                    'name' => $zone['name'] ?? '',
-                    'status' => $zone['status'] ?? null,
-                    'routing_enabled' => $routingEnabled,
-                    'last_synced_at' => now(),
-                ],
+                ['zone_id' => $zoneId],
+                $attributes,
             );
             $count++;
         }
 
         return $count;
+    }
+
+    /**
+     * Receiving is on when Email Routing reports enabled/ready. Tokens that
+     * can manage rules often still get 403 from the settings endpoint; an
+     * enabled rule (including catch-all) is the same signal.
+     */
+    protected function routingEnabled(string $zoneId): bool
+    {
+        try {
+            $routing = $this->client()->getRoutingSettings($zoneId);
+
+            return ($routing['enabled'] ?? false) === true
+                || ($routing['status'] ?? null) === 'ready';
+        } catch (CloudflareException) {
+            // Fall through to the rules list.
+        }
+
+        try {
+            foreach ($this->client()->listRoutingRules($zoneId) as $rule) {
+                if (($rule['enabled'] ?? true) === true) {
+                    return true;
+                }
+            }
+        } catch (CloudflareException) {
+            // Can't tell. Leave the column off rather than failing the sync.
+        }
+
+        return false;
+    }
+
+    /**
+     * True when any Email Sending subdomain on the zone is enabled.
+     * Null when the endpoint cannot be read.
+     */
+    protected function sendingEnabled(string $zoneId): ?bool
+    {
+        try {
+            $subdomains = $this->client()->listSendingSubdomains($zoneId);
+        } catch (CloudflareException) {
+            return null;
+        }
+
+        foreach ($subdomains as $subdomain) {
+            if (($subdomain['enabled'] ?? false) === true) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function syncDestinationAddresses(): int
