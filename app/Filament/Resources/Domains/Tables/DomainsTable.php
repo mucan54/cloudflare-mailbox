@@ -21,16 +21,15 @@ class DomainsTable
     {
         return $table
             ->recordActions([
-                // Email Sending onboarding is dashboard-only (no Cloudflare API
-                // for it), so we can't flip this on from here — deep-link the
-                // operator straight to this account's Email Sending page.
+                // Onboarding is dashboard-only, so this deep-links to the current
+                // Email Service page instead of the retired /email/sending URL.
                 Action::make('enableSending')
                     ->label('Gönderimi aç')
                     ->icon('heroicon-o-paper-airplane')
                     ->color('warning')
                     ->visible(fn ($record) => (bool) $record->zone_id && ! $record->sending_enabled)
-                    ->tooltip('Cloudflare panelinde Compute → Email Service → Email Sending → “Onboard Domain” sayfasını açar (bu adım API ile yapılamıyor).')
-                    ->url(fn () => 'https://dash.cloudflare.com/'.Filament::getTenant()->account_id.'/email/sending')
+                    ->tooltip('Cloudflare Email Service onboarding sayfasını açar.')
+                    ->url(fn () => Filament::getTenant()?->emailServiceOnboardingUrl())
                     ->openUrlInNewTab(),
 
                 Action::make('sendingDns')
