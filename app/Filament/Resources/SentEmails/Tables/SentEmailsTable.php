@@ -43,7 +43,7 @@ class SentEmailsTable
                     ->label('Durum')
                     ->badge()
                     ->color(fn (string $state) => match ($state) {
-                        'delivered' => 'success',
+                        'delivered', 'sent' => 'success',
                         'queued' => 'info',
                         'bounced' => 'warning',
                         'failed' => 'danger',
@@ -62,7 +62,8 @@ class SentEmailsTable
                 SelectFilter::make('status')
                     ->label('Durum')
                     ->options([
-                        'delivered' => 'Teslim edildi',
+                        'delivered' => 'delivered',
+                        'sent' => 'sent',
                         'queued' => 'Kuyrukta (gönderildi)',
                         'bounced' => 'Geri döndü',
                         'failed' => 'Başarısız',

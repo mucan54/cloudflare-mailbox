@@ -1,6 +1,7 @@
 @php
     $badge = match ($s->status) {
-        'delivered' => ['Teslim edildi', 'success'],
+        'delivered' => ['delivered', 'success'],
+        'sent' => ['sent', 'success'],
         'queued' => ['Kuyrukta — Cloudflare kabul etti, teslim asenkron', 'info'],
         'bounced' => ['Geri döndü (alıcı reddetti)', 'warning'],
         'failed' => ['Başarısız', 'danger'],

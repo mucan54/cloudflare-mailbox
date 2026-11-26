@@ -11,3 +11,7 @@ Artisan::command('inspire', function () {
 // Push a reminder ~30 minutes before upcoming events. Requires the Laravel
 // scheduler to be running (a cron entry: * * * * * php artisan schedule:run).
 Schedule::command('calendar:remind')->everyFiveMinutes()->withoutOverlapping();
+
+// The send API often answers "queued". Refresh those rows from the activity
+// log so a finished message shows sent or delivered, whichever Cloudflare recorded.
+Schedule::command('mail:sync-sent-status')->everyFiveMinutes()->withoutOverlapping();

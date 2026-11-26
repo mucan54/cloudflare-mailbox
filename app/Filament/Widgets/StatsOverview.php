@@ -23,7 +23,7 @@ class StatsOverview extends StatsOverviewWidget
 
         $sent = $account->sentEmails()->where('sent_at', '>=', $since);
         $sentTotal = (clone $sent)->count();
-        $delivered = (clone $sent)->where('status', 'delivered')->count();
+        $delivered = (clone $sent)->whereIn('status', ['delivered', 'sent'])->count();
         $bounced = (clone $sent)->whereIn('status', ['bounced', 'failed'])->count();
 
         return [
