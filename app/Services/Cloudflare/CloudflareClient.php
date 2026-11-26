@@ -295,6 +295,30 @@ class CloudflareClient
     // --- Sending ----------------------------------------------------------
 
     /**
+     * Sending subdomains onboarded for this zone. `enabled` is what the
+     * domain list's Gönderme column should reflect.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function listSendingSubdomains(string $zoneId): array
+    {
+        $all = [];
+        $page = 1;
+
+        do {
+            $res = $this->get("/zones/{$zoneId}/email/sending/subdomains", [
+                'per_page' => 50,
+                'page' => $page,
+            ]);
+            $all = array_merge($all, $res['result'] ?? []);
+            $totalPages = (int) ($res['result_info']['total_pages'] ?? 1);
+            $page++;
+        } while ($page <= $totalPages);
+
+        return $all;
+    }
+
+    /**
      * POST /accounts/{id}/email/sending/send
      *
      * @param  array<string, mixed>  $message
