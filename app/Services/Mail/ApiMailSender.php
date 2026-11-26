@@ -72,15 +72,12 @@ class ApiMailSender implements MailSender
     }
 
     /**
-     * Deep-link to this account's Email Sending page in the Cloudflare
-     * dashboard, where a domain is onboarded ("Onboard Domain"). Null when the
+     * Deep-link to this account's Email Service onboarding page. Null when the
      * account id is unknown.
      */
     protected function dashboardSendingUrl(CloudflareAccount $account): ?string
     {
-        return filled($account->account_id)
-            ? 'https://dash.cloudflare.com/'.$account->account_id.'/email/sending'
-            : null;
+        return $account->emailServiceOnboardingUrl();
     }
 
     /**

@@ -108,6 +108,19 @@ class CloudflareAccount extends Model
         return $this->worker_deployed_at !== null;
     }
 
+    /**
+     * Cloudflare moved Email Service out of /email/sending. "Gönderimi aç"
+     * deep-links here so onboarding opens the current dashboard page.
+     */
+    public function emailServiceOnboardingUrl(): ?string
+    {
+        if (! filled($this->account_id)) {
+            return null;
+        }
+
+        return 'https://dash.cloudflare.com/'.$this->account_id.'/email-service/routing/onboarding';
+    }
+
     public function getRouteKeyName(): string
     {
         return 'slug';
