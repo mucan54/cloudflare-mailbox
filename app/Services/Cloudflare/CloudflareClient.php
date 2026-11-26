@@ -329,6 +329,77 @@ class CloudflareClient
         return $this->post("/accounts/{$this->accountId}/email/sending/send", $message)['result'] ?? [];
     }
 
+    /**
+     * Final Email Sending activity events for the given Cloudflare message ids.
+     * The send API's first answer is often "queued"; this is the later outcome
+     * (`sent`, `delivered`, `deliveryFailed`, …).
+     *
+     * @param  array<int, string>  $messageIds
+     * @return array<int, array<string, mixed>>
+     */
+    public function finalSendingEvents(array $messageIds, string $since, string $until): array
+    {
+        if ($messageIds === [] || ! filled($this->accountId)) {
+            return [];
+        }
+
+        $query = <<<'GQL'
+query($account: String!, $ids: [String!]!, $since: Time!, $until: Time!) {
+  viewer {
+    accounts(filter: {accountTag: $account}) {
+      emailSendingAdaptive(
+        limit: 100
+        filter: {
+          datetime_geq: $since
+          datetime_leq: $until
+          messageId_in: $ids
+          isLastEvent: 1
+        }
+      ) {
+        messageId
+        status
+        errorCause
+        errorDetail
+      }
+    }
+  }
+}
+GQL;
+
+        $data = $this->graphql($query, [
+            'account' => $this->accountId,
+            'ids' => array_values($messageIds),
+            'since' => $since,
+            'until' => $until,
+        ]);
+
+        return $data['viewer']['accounts'][0]['emailSendingAdaptive'] ?? [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $variables
+     * @return array<string, mixed>
+     */
+    public function graphql(string $query, array $variables = []): array
+    {
+        $response = $this->http()->post('/graphql', [
+            'query' => $query,
+            'variables' => $variables,
+        ]);
+
+        $json = $response->json() ?? [];
+
+        if ($response->failed() || ! empty($json['errors'])) {
+            throw CloudflareException::fromResponse(
+                'POST /graphql',
+                $json['errors'] ?? [['message' => $response->body() ?: 'GraphQL request failed']],
+                $response->status(),
+            );
+        }
+
+        return $json['data'] ?? [];
+    }
+
     // --- Suppression list -------------------------------------------------
     // Addresses Cloudflare refuses to send to after hard bounces / spam
     // complaints. The base path is config-overridable in case Cloudflare
